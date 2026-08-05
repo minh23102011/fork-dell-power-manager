@@ -123,11 +123,20 @@ class TransactionRecord(SerializableModel):
             for key, item in changes_raw.items():
                 if not isinstance(key, str) or not isinstance(item, dict):
                     raise TypeError("invalid setting change")
+
+                item_key = item.get("key", key)
+                if not isinstance(item_key, str) or not item_key:
+                    raise TypeError("setting change key must be a non-empty string")
+
+                required_raw = item.get("required", True)
+                if not isinstance(required_raw, bool):
+                    raise TypeError("required must be a boolean")
+
                 changes[key] = SettingChange(
-                    key=str(item.get("key", key)),
+                    key=item_key,
                     before=item.get("before"),
                     applied=item.get("applied"),
-                    required=bool(item.get("required", True)),
+                    required=required_raw,
                 )
             errors_raw = raw.get("error_messages", [])
             if not isinstance(errors_raw, list) or not all(

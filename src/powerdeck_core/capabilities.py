@@ -40,14 +40,19 @@ def find_battery_refresh_mode(
 ) -> DisplayMode | None:
     """Find the closest same-resolution mode around the requested refresh rate."""
 
-    current = output.current_mode
-    candidates = [mode for mode in output.modes if abs(mode.refresh_hz - target_hz) <= tolerance_hz]
-    if current is not None:
-        candidates = [
-            mode
-            for mode in candidates
-            if mode.width == current.width and mode.height == current.height
-        ]
+    reference = output.current_mode
+    if reference is None:
+        reference = next((mode for mode in output.modes if mode.preferred), None)
+    if reference is None:
+        return None
+
+    candidates = [
+        mode
+        for mode in output.modes
+        if mode.width == reference.width
+        and mode.height == reference.height
+        and abs(mode.refresh_hz - target_hz) <= tolerance_hz
+    ]
     if not candidates:
         return None
     return min(candidates, key=lambda mode: abs(mode.refresh_hz - target_hz))
