@@ -1,0 +1,1 @@
+# fork-dell-power-manager
