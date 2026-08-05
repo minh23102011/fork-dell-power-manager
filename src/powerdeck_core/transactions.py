@@ -38,12 +38,8 @@ _ALLOWED_TRANSITIONS: dict[TransactionState, frozenset[TransactionState]] = {
     TransactionState.ACTIVE: frozenset(
         {TransactionState.RESTORING, TransactionState.ROLLING_BACK, TransactionState.ERROR}
     ),
-    TransactionState.RESTORING: frozenset(
-        {TransactionState.COMPLETED, TransactionState.ERROR}
-    ),
-    TransactionState.ROLLING_BACK: frozenset(
-        {TransactionState.COMPLETED, TransactionState.ERROR}
-    ),
+    TransactionState.RESTORING: frozenset({TransactionState.COMPLETED, TransactionState.ERROR}),
+    TransactionState.ROLLING_BACK: frozenset({TransactionState.COMPLETED, TransactionState.ERROR}),
     TransactionState.COMPLETED: frozenset(),
     TransactionState.ERROR: frozenset(
         {TransactionState.RESTORING, TransactionState.ROLLING_BACK, TransactionState.COMPLETED}
@@ -70,7 +66,7 @@ class TransactionRecord(SerializableModel):
     error_messages: list[str] = field(default_factory=list)
 
     @classmethod
-    def create(cls, trigger: str) -> "TransactionRecord":
+    def create(cls, trigger: str) -> TransactionRecord:
         now = datetime.now(UTC)
         return cls(
             transaction_id=str(uuid4()),
@@ -114,7 +110,7 @@ class TransactionRecord(SerializableModel):
         self.updated_at = datetime.now(UTC)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "TransactionRecord":
+    def from_dict(cls, raw: dict[str, Any]) -> TransactionRecord:
         try:
             changes_raw = raw.get("changes", {})
             if not isinstance(changes_raw, dict):
@@ -139,9 +135,7 @@ class TransactionRecord(SerializableModel):
                     required=required_raw,
                 )
             errors_raw = raw.get("error_messages", [])
-            if not isinstance(errors_raw, list) or not all(
-                isinstance(item, str) for item in errors_raw
-            ):
+            if not isinstance(errors_raw, list) or not all(isinstance(item, str) for item in errors_raw):
                 raise TypeError("error_messages must be an array of strings")
             return cls(
                 transaction_id=str(raw["transaction_id"]),
@@ -184,10 +178,7 @@ def build_restore_plan(
 def build_rollback_plan(transaction: TransactionRecord) -> dict[str, JSONValue]:
     """Rollback is attempted in reverse insertion order."""
 
-    return {
-        key: change.before
-        for key, change in reversed(tuple(transaction.changes.items()))
-    }
+    return {key: change.before for key, change in reversed(tuple(transaction.changes.items()))}
 
 
 __all__ = [

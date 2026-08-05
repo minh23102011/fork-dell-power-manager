@@ -184,10 +184,7 @@ class SysfsBatteryReader:
         )
 
         interval: ChargeInterval | None = None
-        if (
-            battery.charge_control_start_percent is not None
-            and battery.charge_control_end_percent is not None
-        ):
+        if battery.charge_control_start_percent is not None and battery.charge_control_end_percent is not None:
             interval = ChargeInterval(
                 start_percent=battery.charge_control_start_percent,
                 end_percent=battery.charge_control_end_percent,

@@ -8,6 +8,7 @@ from powerdeck_core.models import (
     DiagnosticIssue,
     DisplayMode,
     DisplayOutput,
+    JSONValue,
     PowerDeckCapabilities,
     PowerDeckStatus,
     ServiceActivity,
@@ -100,7 +101,10 @@ def build_diagnostics(
         )
 
     if capabilities.power_manager.has_conflict:
-        names = [service.name for service in capabilities.power_manager.active_services]
+        names: list[JSONValue] = [
+            service.name
+            for service in capabilities.power_manager.active_services
+        ]
         issues.append(
             DiagnosticIssue(
                 code="power-manager-conflict",
@@ -180,9 +184,7 @@ def build_diagnostics(
 
 def active_power_manager_names(capabilities: PowerDeckCapabilities) -> tuple[str, ...]:
     return tuple(
-        service.name
-        for service in capabilities.power_manager.services
-        if service.activity is ServiceActivity.ACTIVE
+        service.name for service in capabilities.power_manager.services if service.activity is ServiceActivity.ACTIVE
     )
 
 

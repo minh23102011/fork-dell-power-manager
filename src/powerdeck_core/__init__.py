@@ -7,9 +7,9 @@ from powerdeck_core.capabilities import (
     select_internal_output,
 )
 from powerdeck_core.config import (
+    CONFIG_SCHEMA_VERSION,
     BatteryConfig,
     BatterySaverConfig,
-    CONFIG_SCHEMA_VERSION,
     ConfigLoadResult,
     DeviceSaverConfig,
     DisplaySaverConfig,
@@ -84,13 +84,13 @@ from powerdeck_core.validation import (
 __version__ = "0.1.0.dev0"
 
 __all__ = [
+    "CONFIG_SCHEMA_VERSION",
     "AcAdapterState",
     "AudioState",
     "BatteryConfig",
     "BatteryInfo",
     "BatterySaverConfig",
     "BrightnessDevice",
-    "CONFIG_SCHEMA_VERSION",
     "ChargeCapabilities",
     "ChargeInterval",
     "ChargeMode",

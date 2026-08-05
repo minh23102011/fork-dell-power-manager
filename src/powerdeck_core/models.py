@@ -8,10 +8,9 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import TypeAlias
 
-JSONScalar: TypeAlias = None | bool | int | float | str
-JSONValue: TypeAlias = JSONScalar | list["JSONValue"] | dict[str, "JSONValue"]
+type JSONScalar = bool | int | float | str | None
+type JSONValue = JSONScalar | list[JSONValue] | dict[str, JSONValue]
 
 
 def to_primitive(value: object) -> JSONValue:
@@ -228,11 +227,7 @@ class PowerManagerState(SerializableModel):
 
     @property
     def active_services(self) -> tuple[ServiceState, ...]:
-        return tuple(
-            service
-            for service in self.services
-            if service.activity is ServiceActivity.ACTIVE
-        )
+        return tuple(service for service in self.services if service.activity is ServiceActivity.ACTIVE)
 
     @property
     def has_conflict(self) -> bool:
@@ -243,11 +238,7 @@ class PowerManagerState(SerializableModel):
             "tlp",
             "auto-cpufreq",
         }
-        active = [
-            service
-            for service in self.active_services
-            if service.name in known_managers
-        ]
+        active = [service for service in self.active_services if service.name in known_managers]
         return len(active) > 1
 
 

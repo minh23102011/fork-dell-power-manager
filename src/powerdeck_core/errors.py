@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+
 from powerdeck_core.models import DiagnosticIssue, JSONValue, Severity, to_primitive
 
 
@@ -45,9 +46,7 @@ class PowerDeckError(Exception):
         self.details = details or {}
 
     def to_diagnostic(self, *, severity: Severity | None = None) -> DiagnosticIssue:
-        primitive_details: dict[str, JSONValue] = {
-            key: to_primitive(value) for key, value in self.details.items()
-        }
+        primitive_details: dict[str, JSONValue] = {key: to_primitive(value) for key, value in self.details.items()}
         return DiagnosticIssue(
             code=self.code.value,
             severity=severity or self.default_severity,

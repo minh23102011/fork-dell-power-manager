@@ -588,11 +588,11 @@ def save_config_atomic(
 
 
 __all__ = [
+    "CONFIG_SCHEMA_VERSION",
+    "DEFAULT_CONFIG_PATH",
     "BatteryConfig",
     "BatterySaverConfig",
-    "CONFIG_SCHEMA_VERSION",
     "ConfigLoadResult",
-    "DEFAULT_CONFIG_PATH",
     "DeviceSaverConfig",
     "DisplaySaverConfig",
     "PerformanceSaverConfig",
