@@ -54,3 +54,16 @@ def test_display_current_mode() -> None:
 
     assert output.current_mode is not None
     assert output.current_mode.refresh_hz == 120.003
+
+
+def test_compact_json_omits_optional_whitespace() -> None:
+    status = PowerDeckStatus(
+        batteries=(BatteryInfo(name="BAT0", capacity_percent=79),),
+    )
+
+    compact = status.to_json(indent=None)
+
+    assert '"name":"BAT0"' in compact
+    assert '"name": "BAT0"' not in compact
+    assert "\n" not in compact
+

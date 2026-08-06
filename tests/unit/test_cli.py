@@ -3,6 +3,7 @@ import io
 from powerdeck_backends.scanner import DiscoverySnapshot
 from powerdeck_cli.main import run
 from powerdeck_core.models import (
+    AudioState,
     BatteryInfo,
     ChargeCapabilities,
     ChargeMode,
@@ -27,6 +28,7 @@ class FakeScanner:
                 scaling_driver="intel_pstate",
                 current_governor="powersave",
             ),
+            audio_control=True,
             ac_monitoring=True,
         )
         status = PowerDeckStatus(
@@ -44,7 +46,17 @@ class FakeScanner:
                 ),
             ),
             charge=ChargeState(mode=ChargeMode.CUSTOM),
-            thermal=ThermalState(current_profile=ThermalProfile.BALANCED),
+            thermal=ThermalState(
+                current_profile=ThermalProfile.BALANCED,
+            ),
+            audio=AudioState(
+                available=True,
+                sink_volume=0.8,
+                sink_muted=False,
+                source_volume=0.25,
+                source_muted=True,
+                backend="wpctl",
+            ),
         )
         return DiscoverySnapshot(1, capabilities, status)
 
@@ -52,12 +64,19 @@ class FakeScanner:
 def test_status_human_output() -> None:
     stdout = io.StringIO()
 
-    result = run(["status"], scanner=FakeScanner(), stdout=stdout)
+    result = run(
+        ["status"],
+        scanner=FakeScanner(),
+        stdout=stdout,
+    )
 
+    output = stdout.getvalue()
     assert result == 0
-    assert "Dell Inc. Test Laptop" in stdout.getvalue()
-    assert "Battery BAT0: 79%" in stdout.getvalue()
-    assert "Thermal profile: balanced" in stdout.getvalue()
+    assert "Dell Inc. Test Laptop" in output
+    assert "Battery BAT0: 79%" in output
+    assert "Thermal profile: balanced" in output
+    assert "Audio: sink 80% (unmuted)" in output
+    assert "source 25% (muted)" in output
 
 
 def test_status_json_output() -> None:
@@ -72,12 +91,17 @@ def test_status_json_output() -> None:
     assert result == 0
     assert '"capabilities"' in stdout.getvalue()
     assert '"Test Laptop"' in stdout.getvalue()
+    assert '"backend":"wpctl"' in stdout.getvalue()
 
 
 def test_compact_requires_json() -> None:
     stderr = io.StringIO()
 
-    result = run(["status", "--compact"], scanner=FakeScanner(), stderr=stderr)
+    result = run(
+        ["status", "--compact"],
+        scanner=FakeScanner(),
+        stderr=stderr,
+    )
 
     assert result == 2
     assert "requires --json" in stderr.getvalue()

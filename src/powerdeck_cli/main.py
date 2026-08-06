@@ -21,7 +21,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="powerdeckctl",
         description="Inspect PowerDeck hardware capabilities and current state.",
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
     status_parser = subparsers.add_parser(
@@ -43,6 +47,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _format_unknown(value: object | None) -> str:
     return "unknown" if value is None else str(value)
+
+
+def _format_volume(value: float | None) -> str:
+    if value is None:
+        return "unknown"
+    return f"{value * 100:.0f}%"
+
+
+def _format_mute(value: bool | None) -> str:
+    if value is None:
+        return "mute unknown"
+    return "muted" if value else "unmuted"
 
 
 def _format_human(snapshot: DiscoverySnapshot) -> str:
@@ -77,7 +93,9 @@ def _format_human(snapshot: DiscoverySnapshot) -> str:
         lines.append("Battery: not detected")
 
     charge_mode = (
-        status.charge.mode.value if status.charge.mode is not None else "unknown"
+        status.charge.mode.value
+        if status.charge.mode is not None
+        else "unknown"
     )
     interval = status.charge.interval
     interval_text = (
@@ -103,18 +121,47 @@ def _format_human(snapshot: DiscoverySnapshot) -> str:
     )
 
     on_ac = status.on_ac_power
-    ac_text = "unknown" if on_ac is None else ("online" if on_ac else "offline")
+    ac_text = (
+        "unknown"
+        if on_ac is None
+        else ("online" if on_ac else "offline")
+    )
     lines.append(f"AC power: {ac_text}")
 
     manager = status.power_manager.provider or "none/ambiguous"
     lines.append(f"Power manager: {manager}")
 
-    errors = sum(issue.severity is Severity.ERROR for issue in status.diagnostics)
-    warnings = sum(issue.severity is Severity.WARNING for issue in status.diagnostics)
-    info = sum(issue.severity is Severity.INFO for issue in status.diagnostics)
-    lines.append(f"Diagnostics: {errors} error, {warnings} warning, {info} info")
+    audio = status.audio
+    if audio.available:
+        lines.append(
+            "Audio: "
+            f"sink {_format_volume(audio.sink_volume)} "
+            f"({_format_mute(audio.sink_muted)}), "
+            f"source {_format_volume(audio.source_volume)} "
+            f"({_format_mute(audio.source_muted)})"
+        )
+    else:
+        lines.append("Audio: unavailable")
+
+    errors = sum(
+        issue.severity is Severity.ERROR
+        for issue in status.diagnostics
+    )
+    warnings = sum(
+        issue.severity is Severity.WARNING
+        for issue in status.diagnostics
+    )
+    info = sum(
+        issue.severity is Severity.INFO
+        for issue in status.diagnostics
+    )
+    lines.append(
+        f"Diagnostics: {errors} error, {warnings} warning, {info} info"
+    )
     for issue in status.diagnostics:
-        lines.append(f"  [{issue.severity.value}] {issue.code}: {issue.message}")
+        lines.append(
+            f"  [{issue.severity.value}] {issue.code}: {issue.message}"
+        )
     return "\n".join(lines)
 
 
@@ -132,13 +179,21 @@ def run(
         parser.error(f"unsupported command: {args.command}")
 
     if args.compact and not args.json:
-        print("powerdeckctl: --compact requires --json", file=stderr)
+        print(
+            "powerdeckctl: --compact requires --json",
+            file=stderr,
+        )
         return 2
 
-    active_scanner = scanner if scanner is not None else PowerDeckScanner()
+    active_scanner = (
+        scanner if scanner is not None else PowerDeckScanner()
+    )
     snapshot = active_scanner.scan()
     if args.json:
-        print(snapshot.to_json(indent=None if args.compact else 2), file=stdout)
+        print(
+            snapshot.to_json(indent=None if args.compact else 2),
+            file=stdout,
+        )
     else:
         print(_format_human(snapshot), file=stdout)
     return 0

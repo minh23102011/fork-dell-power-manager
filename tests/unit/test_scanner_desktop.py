@@ -1,7 +1,7 @@
-
 from powerdeck_backends.scanner import PowerDeckScanner
 from powerdeck_core.models import (
     AcAdapterState,
+    AudioState,
     BatteryInfo,
     BrightnessDevice,
     ChargeCapabilities,
@@ -85,7 +85,9 @@ class FakeBrightness:
             current_percent=50.0,
         )
 
-    def read_brightness_devices(self) -> tuple[BrightnessDevice, ...]:
+    def read_brightness_devices(
+        self,
+    ) -> tuple[BrightnessDevice, ...]:
         return (self.device,)
 
 
@@ -104,10 +106,26 @@ class FakeKeyboard:
         return (self.device,)
 
 
+class FakeAudio:
+    def __init__(self) -> None:
+        self.state = AudioState(
+            available=True,
+            sink_volume=0.8,
+            sink_muted=False,
+            source_volume=0.25,
+            source_muted=True,
+            backend="wpctl",
+        )
+
+    def read(self) -> AudioState:
+        return self.state
+
+
 def test_scanner_integrates_desktop_readers() -> None:
     displays = FakeDisplays()
     brightness = FakeBrightness()
     keyboard = FakeKeyboard()
+    audio = FakeAudio()
 
     scanner = PowerDeckScanner(
         battery=FakeBattery(),
@@ -119,6 +137,7 @@ def test_scanner_integrates_desktop_readers() -> None:
         displays=displays,
         brightness=brightness,
         keyboard_backlights=keyboard,
+        audio=audio,
     )
 
     snapshot = scanner.scan()
@@ -126,11 +145,22 @@ def test_scanner_integrates_desktop_readers() -> None:
     assert scanner.displays is displays
     assert scanner.brightness is brightness
     assert scanner.keyboard_backlights is keyboard
+    assert scanner.audio is audio
 
     assert snapshot.capabilities.displays == (displays.output,)
-    assert snapshot.capabilities.brightness_devices == (brightness.device,)
-    assert snapshot.capabilities.keyboard_backlights == (keyboard.device,)
+    assert snapshot.capabilities.brightness_devices == (
+        brightness.device,
+    )
+    assert snapshot.capabilities.keyboard_backlights == (
+        keyboard.device,
+    )
+    assert snapshot.capabilities.audio_control is True
 
     assert snapshot.status.displays == (displays.output,)
     assert snapshot.status.brightness_devices == (brightness.device,)
     assert snapshot.status.keyboard_backlights == (keyboard.device,)
+    assert snapshot.status.audio == audio.state
+    assert not any(
+        issue.code == "audio-control-unavailable"
+        for issue in snapshot.status.diagnostics
+    )

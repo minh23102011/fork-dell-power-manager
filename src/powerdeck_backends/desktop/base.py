@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from powerdeck_core.models import (
+    AudioState,
     BrightnessDevice,
     DisplayOutput,
     KeyboardBacklightDevice,
@@ -31,7 +32,14 @@ class KeyboardBacklightReader(Protocol):
     ) -> tuple[KeyboardBacklightDevice, ...]: ...
 
 
+class AudioReader(Protocol):
+    """Read session audio state without changing it."""
+
+    def read(self) -> AudioState: ...
+
+
 __all__ = [
+    "AudioReader",
     "BrightnessReader",
     "DisplayReader",
     "KeyboardBacklightReader",

@@ -58,6 +58,7 @@ class SerializableModel:
             self.to_dict(),
             ensure_ascii=False,
             indent=indent,
+            separators=(",", ":") if indent is None else None,
             sort_keys=True,
         )
 

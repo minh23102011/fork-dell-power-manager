@@ -1,4 +1,3 @@
-
 """Aggregate read-only backends into one stable PowerDeck snapshot."""
 
 from __future__ import annotations
@@ -9,8 +8,10 @@ from powerdeck_backends.battery.base import BatteryReader
 from powerdeck_backends.battery.sysfs_reader import SysfsBatteryReader
 from powerdeck_backends.cpu.base import CpuReader
 from powerdeck_backends.cpu.intel_pstate import IntelPstateReader
+from powerdeck_backends.desktop.audio import WpctlAudioReader
 from powerdeck_backends.desktop.backlight import SysfsBacklightReader
 from powerdeck_backends.desktop.base import (
+    AudioReader,
     BrightnessReader,
     DisplayReader,
     KeyboardBacklightReader,
@@ -57,6 +58,7 @@ class PowerDeckScanner:
         displays: DisplayReader | None = None,
         brightness: BrightnessReader | None = None,
         keyboard_backlights: KeyboardBacklightReader | None = None,
+        audio: AudioReader | None = None,
     ) -> None:
         default_backlights = SysfsBacklightReader()
 
@@ -93,6 +95,9 @@ class PowerDeckScanner:
             if keyboard_backlights is not None
             else default_backlights
         )
+        self.audio: AudioReader = (
+            audio if audio is not None else WpctlAudioReader()
+        )
 
     def scan(self) -> DiscoverySnapshot:
         batteries = self.battery.read_batteries()
@@ -109,6 +114,7 @@ class PowerDeckScanner:
         keyboard_backlights = (
             self.keyboard_backlights.read_keyboard_backlights()
         )
+        audio_state = self.audio.read()
 
         capabilities = PowerDeckCapabilities(
             charge=charge_capabilities,
@@ -118,6 +124,7 @@ class PowerDeckScanner:
             displays=displays,
             brightness_devices=brightness_devices,
             keyboard_backlights=keyboard_backlights,
+            audio_control=audio_state.available,
             ac_monitoring=any(
                 adapter.online is not None for adapter in ac_adapters
             ),
@@ -131,6 +138,7 @@ class PowerDeckScanner:
             displays=displays,
             brightness_devices=brightness_devices,
             keyboard_backlights=keyboard_backlights,
+            audio=audio_state,
             ac_adapters=ac_adapters,
         )
         status = replace(
