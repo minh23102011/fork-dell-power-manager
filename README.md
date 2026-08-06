@@ -129,3 +129,6 @@ Do not publish serial numbers or other unnecessary machine identifiers.
 ## License
 
 PowerDeck is distributed under the MIT License. See [`LICENSE`](LICENSE).
+## Contributors
+
+- [@nghianguyen150612](https://github.com/nghianguyen150612) — Help
