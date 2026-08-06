@@ -1,0 +1,13 @@
+[Unit]
+Description=PowerDeck Battery Saver session agent
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@PROJECT_ROOT@/scripts/run-agent.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

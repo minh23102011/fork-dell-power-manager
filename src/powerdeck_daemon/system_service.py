@@ -38,6 +38,26 @@ _INTROSPECTION_XML = f"""\
       <arg name="profile" type="s" direction="in"/>
       <arg name="result_json" type="s" direction="out"/>
     </method>
+    <method name="GetChargeState">
+      <arg name="state_json" type="s" direction="out"/>
+    </method>
+    <method name="SetChargeMode">
+      <arg name="mode" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    <method name="SetChargeThresholds">
+      <arg name="start_percent" type="i" direction="in"/>
+      <arg name="end_percent" type="i" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+    <method name="GetCpuState">
+      <arg name="state_json" type="s" direction="out"/>
+    </method>
+    <method name="SetCpuPolicy">
+      <arg name="disable_turbo" type="b" direction="in"/>
+      <arg name="max_performance_percent" type="i" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
   </interface>
   <interface name="{_INTROSPECTABLE}">
     <method name="Introspect">
@@ -57,8 +77,6 @@ def _error_name(error: PowerDeckError) -> str:
 
 
 class SystemService:
-    """Route low-level D-Bus messages while retaining caller identity."""
-
     def __init__(
         self,
         bus: MessageBus,
@@ -73,7 +91,6 @@ class SystemService:
             return False
         if message.path != OBJECT_PATH:
             return False
-
         task = asyncio.create_task(self._dispatch(message))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -94,15 +111,19 @@ class SystemService:
                 _FAILED,
                 f"{type(error).__name__}: {error}",
             )
-
         await self.bus.send(reply)
+
+    @staticmethod
+    def _invalid(message: Message, text: str) -> Message:
+        return Message.new_error(message, _INVALID_ARGS, text)
 
     async def _call(self, message: Message) -> Message:
         if (
             message.interface == _INTROSPECTABLE
             and message.member == "Introspect"
         ):
-            self._require_signature(message, "")
+            if message.signature:
+                return self._invalid(message, "Introspect takes no arguments.")
             return Message.new_method_return(
                 message,
                 "s",
@@ -110,7 +131,6 @@ class SystemService:
             )
 
         if message.interface == _PEER and message.member == "Ping":
-            self._require_signature(message, "")
             return Message.new_method_return(message)
 
         if message.interface != INTERFACE:
@@ -120,69 +140,89 @@ class SystemService:
                 "Unknown PowerDeck interface.",
             )
 
-        if message.member == "Ping":
-            self._require_signature(message, "")
+        member = message.member
+        sender = message.sender or ""
+
+        if member == "Ping" and not message.signature:
+            return Message.new_method_return(message, "s", ["pong"])
+        if member == "GetThermalState" and not message.signature:
             return Message.new_method_return(
                 message,
                 "s",
-                ["pong"],
+                [await self.api.get_thermal_state()],
             )
-
-        if message.member == "GetThermalState":
-            self._require_signature(message, "")
-            state_json = await self.api.get_thermal_state()
+        if member == "SetThermalProfile" and message.signature == "s":
             return Message.new_method_return(
                 message,
                 "s",
-                [state_json],
+                [
+                    await self.api.set_thermal_profile(
+                        sender,
+                        str(message.body[0]),
+                    )
+                ],
             )
-
-        if message.member == "SetThermalProfile":
-            self._require_signature(message, "s")
-            profile = message.body[0]
-            if not isinstance(profile, str):
-                return Message.new_error(
-                    message,
-                    _INVALID_ARGS,
-                    "profile must be a string",
-                )
-
-            result_json = await self.api.set_thermal_profile(
-                message.sender or "",
-                profile,
-            )
+        if member == "GetChargeState" and not message.signature:
             return Message.new_method_return(
                 message,
                 "s",
-                [result_json],
+                [await self.api.get_charge_state()],
+            )
+        if member == "SetChargeMode" and message.signature == "s":
+            return Message.new_method_return(
+                message,
+                "s",
+                [
+                    await self.api.set_charge_mode(
+                        sender,
+                        str(message.body[0]),
+                    )
+                ],
+            )
+        if member == "SetChargeThresholds" and message.signature == "ii":
+            return Message.new_method_return(
+                message,
+                "s",
+                [
+                    await self.api.set_charge_thresholds(
+                        sender,
+                        int(message.body[0]),
+                        int(message.body[1]),
+                    )
+                ],
+            )
+        if member == "GetCpuState" and not message.signature:
+            return Message.new_method_return(
+                message,
+                "s",
+                [await self.api.get_cpu_state()],
+            )
+        if member == "SetCpuPolicy" and message.signature == "bi":
+            return Message.new_method_return(
+                message,
+                "s",
+                [
+                    await self.api.set_cpu_policy(
+                        sender,
+                        bool(message.body[0]),
+                        int(message.body[1]),
+                    )
+                ],
             )
 
         return Message.new_error(
             message,
             _UNKNOWN_METHOD,
-            f"Unknown method: {message.member}",
+            f"Unknown method or invalid signature: {member}",
         )
-
-    @staticmethod
-    def _require_signature(
-        message: Message,
-        signature: str,
-    ) -> None:
-        if message.signature != signature:
-            raise _InvalidArguments(
-                f"Expected D-Bus signature {signature!r}, "
-                f"received {message.signature!r}."
-            )
-
-
-class _InvalidArguments(PowerDeckError):
-    pass
 
 
 async def _run() -> int:
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-    api = SystemApi(authorizer=PolkitAuthorizer(bus))
-    service = SystemService(bus, api)
+    service = SystemService(
+        bus,
+        SystemApi(authorizer=PolkitAuthorizer(bus)),
+    )
     bus.add_message_handler(service.handle_message)
 
     result = await bus.request_name(BUS_NAME)

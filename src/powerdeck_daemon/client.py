@@ -15,8 +15,6 @@ from powerdeck_daemon.constants import BUS_NAME, INTERFACE, OBJECT_PATH
 
 
 class SystemClient:
-    """Call the versioned PowerDeck system service."""
-
     def __init__(self, bus: MessageBus) -> None:
         self.bus = bus
 
@@ -49,10 +47,7 @@ class SystemClient:
             raise ServiceUnavailableError(
                 "The PowerDeck system service rejected the request.",
                 component="daemon-client",
-                details={
-                    "member": member,
-                    "reason": str(error),
-                },
+                details={"member": member, "reason": str(error)},
             ) from error
 
         if reply is None or not reply.body:
@@ -61,7 +56,6 @@ class SystemClient:
                 component="daemon-client",
                 details={"member": member},
             )
-
         value = reply.body[0]
         if not isinstance(value, str):
             raise ServiceUnavailableError(
@@ -75,19 +69,63 @@ class SystemClient:
         return await self._call("Ping")
 
     async def get_thermal_state(self) -> dict[str, Any]:
-        payload = await self._call("GetThermalState")
-        return _decode_json(payload)
+        return _decode_json(await self._call("GetThermalState"))
 
     async def set_thermal_profile(
         self,
         profile: str,
     ) -> dict[str, Any]:
-        payload = await self._call(
-            "SetThermalProfile",
-            signature="s",
-            body=[profile],
+        return _decode_json(
+            await self._call(
+                "SetThermalProfile",
+                signature="s",
+                body=[profile],
+            )
         )
-        return _decode_json(payload)
+
+    async def get_charge_state(self) -> dict[str, Any]:
+        return _decode_json(await self._call("GetChargeState"))
+
+    async def set_charge_mode(
+        self,
+        mode: str,
+    ) -> dict[str, Any]:
+        return _decode_json(
+            await self._call(
+                "SetChargeMode",
+                signature="s",
+                body=[mode],
+            )
+        )
+
+    async def set_charge_thresholds(
+        self,
+        start_percent: int,
+        end_percent: int,
+    ) -> dict[str, Any]:
+        return _decode_json(
+            await self._call(
+                "SetChargeThresholds",
+                signature="ii",
+                body=[start_percent, end_percent],
+            )
+        )
+
+    async def get_cpu_state(self) -> dict[str, Any]:
+        return _decode_json(await self._call("GetCpuState"))
+
+    async def set_cpu_policy(
+        self,
+        disable_turbo: bool,
+        max_performance_percent: int,
+    ) -> dict[str, Any]:
+        return _decode_json(
+            await self._call(
+                "SetCpuPolicy",
+                signature="bi",
+                body=[disable_turbo, max_performance_percent],
+            )
+        )
 
 
 def _decode_json(payload: str) -> dict[str, Any]:

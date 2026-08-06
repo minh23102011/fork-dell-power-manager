@@ -28,6 +28,8 @@ powerdeckctl = "powerdeck_cli.main:main"
 powerdeck-thermalctl = "powerdeck_daemon.thermalctl:main"
 powerdeckd = "powerdeck_daemon.system_service:main"
 powerdeck-daemonctl = "powerdeck_daemon.daemonctl:main"
+powerdeck-agent = "powerdeck_agent.main:main"
+powerdeck-agentctl = "powerdeck_agent.agentctl:main"
 
 [project.urls]
 Repository = "https://github.com/minh23102011/fork-dell-power-manager"

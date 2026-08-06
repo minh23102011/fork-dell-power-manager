@@ -107,7 +107,10 @@ async def test_authorized_profile_change_is_applied() -> None:
         (
             ":1.42",
             ACTION_SET_THERMAL_PROFILE,
-            {"profile": "balanced"},
+            {
+                "operation": "set-thermal-profile",
+                "profile": "balanced",
+            },
             True,
         )
     ]

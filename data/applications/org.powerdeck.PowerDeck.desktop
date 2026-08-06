@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PowerDeck
+Comment=Battery, thermal, and Battery Saver controls
+Exec=@PROJECT_ROOT@/powerdeck
+Icon=battery-good-symbolic
+Terminal=false
+Categories=Settings;System;
+StartupNotify=true
