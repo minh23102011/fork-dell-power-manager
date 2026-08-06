@@ -2,10 +2,13 @@ from powerdeck_backends.scanner import PowerDeckScanner
 from powerdeck_core.models import (
     AcAdapterState,
     BatteryInfo,
+    BrightnessDevice,
     ChargeCapabilities,
     ChargeMode,
     ChargeState,
     CpuCapabilities,
+    DisplayOutput,
+    KeyboardBacklightDevice,
     MachineInfo,
     PowerManagerState,
     ThermalCapabilities,
@@ -65,6 +68,23 @@ class FakePowerManagerReader:
         return PowerManagerState(provider="power-profiles-daemon")
 
 
+class EmptyDisplayReader:
+    def read(self) -> tuple[DisplayOutput, ...]:
+        return ()
+
+
+class EmptyBrightnessReader:
+    def read_brightness_devices(self) -> tuple[BrightnessDevice, ...]:
+        return ()
+
+
+class EmptyKeyboardBacklightReader:
+    def read_keyboard_backlights(
+        self,
+    ) -> tuple[KeyboardBacklightDevice, ...]:
+        return ()
+
+
 def test_scanner_aggregates_current_backends() -> None:
     snapshot = PowerDeckScanner(
         battery=FakeBatteryReader(),
@@ -73,6 +93,9 @@ def test_scanner_aggregates_current_backends() -> None:
         machine=FakeMachineReader(),
         ac_adapters=FakeAcReader(),
         power_manager=FakePowerManagerReader(),
+        displays=EmptyDisplayReader(),
+        brightness=EmptyBrightnessReader(),
+        keyboard_backlights=EmptyKeyboardBacklightReader(),
     ).scan()
 
     assert snapshot.status.machine.product_name == "Test Laptop"
@@ -97,6 +120,9 @@ def test_snapshot_serializes_capabilities_and_status() -> None:
         machine=FakeMachineReader(),
         ac_adapters=FakeAcReader(),
         power_manager=FakePowerManagerReader(),
+        displays=EmptyDisplayReader(),
+        brightness=EmptyBrightnessReader(),
+        keyboard_backlights=EmptyKeyboardBacklightReader(),
     ).scan()
 
     payload = snapshot.to_dict()

@@ -1,3 +1,4 @@
+
 """Aggregate read-only backends into one stable PowerDeck snapshot."""
 
 from __future__ import annotations
@@ -8,6 +9,13 @@ from powerdeck_backends.battery.base import BatteryReader
 from powerdeck_backends.battery.sysfs_reader import SysfsBatteryReader
 from powerdeck_backends.cpu.base import CpuReader
 from powerdeck_backends.cpu.intel_pstate import IntelPstateReader
+from powerdeck_backends.desktop.backlight import SysfsBacklightReader
+from powerdeck_backends.desktop.base import (
+    BrightnessReader,
+    DisplayReader,
+    KeyboardBacklightReader,
+)
+from powerdeck_backends.desktop.niri import NiriOutputReader
 from powerdeck_backends.system.base import (
     AcAdapterReader,
     MachineReader,
@@ -46,22 +54,44 @@ class PowerDeckScanner:
         machine: MachineReader | None = None,
         ac_adapters: AcAdapterReader | None = None,
         power_manager: PowerManagerStateReader | None = None,
+        displays: DisplayReader | None = None,
+        brightness: BrightnessReader | None = None,
+        keyboard_backlights: KeyboardBacklightReader | None = None,
     ) -> None:
+        default_backlights = SysfsBacklightReader()
+
         self.battery: BatteryReader = (
             battery if battery is not None else SysfsBatteryReader()
         )
         self.thermal: ThermalReader = (
             thermal if thermal is not None else PlatformProfileReader()
         )
-        self.cpu: CpuReader = cpu if cpu is not None else IntelPstateReader()
+        self.cpu: CpuReader = (
+            cpu if cpu is not None else IntelPstateReader()
+        )
         self.machine: MachineReader = (
             machine if machine is not None else MachineInfoReader()
         )
         self.ac_adapters: AcAdapterReader = (
-            ac_adapters if ac_adapters is not None else SysfsAcAdapterReader()
+            ac_adapters
+            if ac_adapters is not None
+            else SysfsAcAdapterReader()
         )
         self.power_manager: PowerManagerStateReader = (
-            power_manager if power_manager is not None else PowerManagerReader()
+            power_manager
+            if power_manager is not None
+            else PowerManagerReader()
+        )
+        self.displays: DisplayReader = (
+            displays if displays is not None else NiriOutputReader()
+        )
+        self.brightness: BrightnessReader = (
+            brightness if brightness is not None else default_backlights
+        )
+        self.keyboard_backlights: KeyboardBacklightReader = (
+            keyboard_backlights
+            if keyboard_backlights is not None
+            else default_backlights
         )
 
     def scan(self) -> DiscoverySnapshot:
@@ -74,13 +104,23 @@ class PowerDeckScanner:
         machine = self.machine.read()
         ac_adapters = self.ac_adapters.read()
         power_manager = self.power_manager.read()
+        displays = self.displays.read()
+        brightness_devices = self.brightness.read_brightness_devices()
+        keyboard_backlights = (
+            self.keyboard_backlights.read_keyboard_backlights()
+        )
 
         capabilities = PowerDeckCapabilities(
             charge=charge_capabilities,
             thermal=thermal_capabilities,
             cpu=cpu_capabilities,
             power_manager=power_manager,
-            ac_monitoring=any(adapter.online is not None for adapter in ac_adapters),
+            displays=displays,
+            brightness_devices=brightness_devices,
+            keyboard_backlights=keyboard_backlights,
+            ac_monitoring=any(
+                adapter.online is not None for adapter in ac_adapters
+            ),
         )
         status = PowerDeckStatus(
             machine=machine,
@@ -88,6 +128,9 @@ class PowerDeckScanner:
             charge=charge_state,
             thermal=thermal_state,
             power_manager=power_manager,
+            displays=displays,
+            brightness_devices=brightness_devices,
+            keyboard_backlights=keyboard_backlights,
             ac_adapters=ac_adapters,
         )
         status = replace(
