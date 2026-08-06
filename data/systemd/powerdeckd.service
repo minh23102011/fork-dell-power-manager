@@ -1,0 +1,24 @@
+[Unit]
+Description=PowerDeck privileged system service
+Documentation=https://github.com/minh23102011/fork-dell-power-manager
+After=dbus.service polkit.service
+Wants=polkit.service
+
+[Service]
+Type=dbus
+BusName=org.powerdeck.System1
+ExecStart=/usr/local/bin/powerdeckd
+User=root
+Group=root
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONDONTWRITEBYTECODE=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

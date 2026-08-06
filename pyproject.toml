@@ -19,11 +19,15 @@ keywords = [
   "dell",
   "niri",
 ]
-dependencies = []
+dependencies = [
+  "dbus-next>=0.2.3,<0.3",
+]
 
 [project.scripts]
 powerdeckctl = "powerdeck_cli.main:main"
 powerdeck-thermalctl = "powerdeck_daemon.thermalctl:main"
+powerdeckd = "powerdeck_daemon.system_service:main"
+powerdeck-daemonctl = "powerdeck_daemon.daemonctl:main"
 
 [project.urls]
 Repository = "https://github.com/minh23102011/fork-dell-power-manager"
@@ -117,3 +121,7 @@ source = [
 show_missing = true
 skip_covered = true
 fail_under = 0
+
+[[tool.mypy.overrides]]
+module = ["dbus_next", "dbus_next.*"]
+ignore_missing_imports = true

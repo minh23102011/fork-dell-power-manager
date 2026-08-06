@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD polkit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/software/polkit/policyconfig-1.dtd">
+<policyconfig>
+  <vendor>PowerDeck</vendor>
+  <vendor_url>https://github.com/minh23102011/fork-dell-power-manager</vendor_url>
+
+  <action id="org.powerdeck.system.set-thermal-profile">
+    <description>Change the laptop thermal profile</description>
+    <message>
+      Authentication is required to change the laptop thermal profile
+    </message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

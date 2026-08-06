@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.powerdeck.System1
+Exec=/usr/local/bin/powerdeckd
+User=root
+SystemdService=powerdeckd.service
