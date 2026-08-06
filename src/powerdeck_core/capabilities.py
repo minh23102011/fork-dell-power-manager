@@ -16,18 +16,31 @@ from powerdeck_core.models import (
 )
 
 
-def select_internal_output(outputs: Iterable[DisplayOutput]) -> DisplayOutput | None:
-    """Select the internal panel without permanently hardcoding a connector name."""
+def select_internal_output(
+    outputs: Iterable[DisplayOutput],
+) -> DisplayOutput | None:
+    """Select the internal panel without hardcoding one connector name."""
 
     materialized = tuple(outputs)
-    explicit = next((output for output in materialized if output.internal and output.enabled), None)
+    explicit = next(
+        (
+            output
+            for output in materialized
+            if output.internal and output.enabled
+        ),
+        None,
+    )
     if explicit is not None:
         return explicit
+
     return next(
         (
             output
             for output in materialized
-            if output.enabled and output.connector.lower().startswith(("edp", "lvds", "dsi"))
+            if output.enabled
+            and output.connector.lower().startswith(
+                ("edp", "lvds", "dsi")
+            )
         ),
         None,
     )
@@ -39,11 +52,18 @@ def find_battery_refresh_mode(
     target_hz: float = 60.0,
     tolerance_hz: float = 1.0,
 ) -> DisplayMode | None:
-    """Find the closest same-resolution mode around the requested refresh rate."""
+    """Find a same-resolution mode around the requested refresh rate."""
 
     reference = output.current_mode
     if reference is None:
-        reference = next((mode for mode in output.modes if mode.preferred), None)
+        reference = next(
+            (
+                mode
+                for mode in output.modes
+                if mode.preferred
+            ),
+            None,
+        )
     if reference is None:
         return None
 
@@ -52,18 +72,22 @@ def find_battery_refresh_mode(
         for mode in output.modes
         if mode.width == reference.width
         and mode.height == reference.height
-        and abs(mode.refresh_hz - target_hz) <= tolerance_hz
+        and abs(mode.refresh_hz - target_hz)
+        <= tolerance_hz
     ]
     if not candidates:
         return None
-    return min(candidates, key=lambda mode: abs(mode.refresh_hz - target_hz))
+    return min(
+        candidates,
+        key=lambda mode: abs(mode.refresh_hz - target_hz),
+    )
 
 
 def build_diagnostics(
     capabilities: PowerDeckCapabilities,
     status: PowerDeckStatus | None = None,
 ) -> tuple[DiagnosticIssue, ...]:
-    """Create user-facing issues without performing any probing or mutation."""
+    """Create user-facing issues without probing or mutation."""
 
     issues: list[DiagnosticIssue] = []
 
@@ -74,7 +98,10 @@ def build_diagnostics(
                 severity=Severity.WARNING,
                 component="battery",
                 message="No battery device was detected.",
-                hint="PowerDeck battery features will remain unavailable on this system.",
+                hint=(
+                    "PowerDeck battery features will remain "
+                    "unavailable on this system."
+                ),
             )
         )
 
@@ -84,8 +111,13 @@ def build_diagnostics(
                 code="charging-control-unavailable",
                 severity=Severity.WARNING,
                 component="battery",
-                message="Battery charging controls are unavailable.",
-                hint="Install the vendor backend or check whether firmware exposes charge controls.",
+                message=(
+                    "Battery charging controls are unavailable."
+                ),
+                hint=(
+                    "Install the vendor backend or check whether "
+                    "firmware exposes charge controls."
+                ),
             )
         )
 
@@ -95,24 +127,63 @@ def build_diagnostics(
                 code="thermal-profile-unavailable",
                 severity=Severity.WARNING,
                 component="thermal",
-                message="No platform thermal profile interface was detected.",
-                hint="Check the platform-profile kernel driver for this laptop.",
+                message=(
+                    "No platform thermal profile interface "
+                    "was detected."
+                ),
+                hint=(
+                    "Check the platform-profile kernel driver "
+                    "for this laptop."
+                ),
             )
         )
 
     if capabilities.power_manager.has_conflict:
         names: list[JSONValue] = [
             service.name
-            for service in capabilities.power_manager.active_services
+            for service
+            in capabilities.power_manager.active_services
         ]
         issues.append(
             DiagnosticIssue(
                 code="power-manager-conflict",
                 severity=Severity.ERROR,
                 component="power",
-                message="Multiple power managers are active and may overwrite each other.",
-                hint="Keep only one system power manager active.",
+                message=(
+                    "Multiple power managers are active and may "
+                    "overwrite each other."
+                ),
+                hint=(
+                    "Keep only one system power manager active."
+                ),
                 details={"active_services": names},
+            )
+        )
+
+    ppd_service = next(
+        (
+            service
+            for service in capabilities.power_manager.services
+            if service.name == "power-profiles-daemon"
+            and service.activity is ServiceActivity.ACTIVE
+        ),
+        None,
+    )
+    if ppd_service is not None and ppd_service.details:
+        issues.append(
+            DiagnosticIssue(
+                code="power-profile-query-failed",
+                severity=Severity.WARNING,
+                component="power",
+                message=(
+                    "Power Profiles Daemon is active, but its "
+                    "profile state could not be read completely."
+                ),
+                hint=(
+                    "Check powerprofilesctl and the system D-Bus "
+                    "PowerProfiles service."
+                ),
+                details={"reason": ppd_service.details},
             )
         )
 
@@ -124,7 +195,10 @@ def build_diagnostics(
                 severity=Severity.INFO,
                 component="display",
                 message="No internal display was detected.",
-                hint="Automatic laptop refresh-rate switching will be disabled.",
+                hint=(
+                    "Automatic laptop refresh-rate switching "
+                    "will be disabled."
+                ),
             )
         )
     elif find_battery_refresh_mode(internal) is None:
@@ -133,8 +207,14 @@ def build_diagnostics(
                 code="battery-refresh-mode-not-found",
                 severity=Severity.INFO,
                 component="display",
-                message="No same-resolution 60 Hz display mode was detected.",
-                hint="Battery Saver will preserve the current refresh rate.",
+                message=(
+                    "No same-resolution 60 Hz display mode "
+                    "was detected."
+                ),
+                hint=(
+                    "Battery Saver will preserve the current "
+                    "refresh rate."
+                ),
             )
         )
 
@@ -144,7 +224,9 @@ def build_diagnostics(
                 code="brightness-control-unavailable",
                 severity=Severity.WARNING,
                 component="display",
-                message="No brightness device was detected.",
+                message=(
+                    "No brightness device was detected."
+                ),
             )
         )
 
@@ -154,7 +236,9 @@ def build_diagnostics(
                 code="keyboard-backlight-unavailable",
                 severity=Severity.INFO,
                 component="keyboard",
-                message="No keyboard backlight device was detected.",
+                message=(
+                    "No keyboard backlight device was detected."
+                ),
             )
         )
 
@@ -164,7 +248,9 @@ def build_diagnostics(
                 code="audio-control-unavailable",
                 severity=Severity.INFO,
                 component="audio",
-                message="Session audio controls are unavailable.",
+                message=(
+                    "Session audio controls are unavailable."
+                ),
             )
         )
 
@@ -174,17 +260,26 @@ def build_diagnostics(
                 code="ac-monitoring-unavailable",
                 severity=Severity.ERROR,
                 component="battery-saver",
-                message="AC adapter state cannot be monitored.",
-                hint="Automatic Battery Saver activation cannot operate safely.",
+                message=(
+                    "AC adapter state cannot be monitored."
+                ),
+                hint=(
+                    "Automatic Battery Saver activation cannot "
+                    "operate safely."
+                ),
             )
         )
 
     return tuple(issues)
 
 
-def active_power_manager_names(capabilities: PowerDeckCapabilities) -> tuple[str, ...]:
+def active_power_manager_names(
+    capabilities: PowerDeckCapabilities,
+) -> tuple[str, ...]:
     return tuple(
-        service.name for service in capabilities.power_manager.services if service.activity is ServiceActivity.ACTIVE
+        service.name
+        for service in capabilities.power_manager.services
+        if service.activity is ServiceActivity.ACTIVE
     )
 
 
