@@ -23,6 +23,7 @@ dependencies = []
 
 [project.scripts]
 powerdeckctl = "powerdeck_cli.main:main"
+powerdeck-thermalctl = "powerdeck_daemon.thermalctl:main"
 
 [project.urls]
 Repository = "https://github.com/minh23102011/fork-dell-power-manager"
