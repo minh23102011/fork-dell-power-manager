@@ -144,6 +144,43 @@ def _on_ac_power() -> bool | None:
     return any(values) if values else None
 
 
+def select_automatic_action(
+    settings: SaverSettings,
+    state: dict[str, Any],
+    *,
+    on_ac: bool | None,
+) -> str | None:
+    """Choose an edge-triggered automatic action for the AC state."""
+
+    if on_ac is None:
+        return None
+
+    previous = state.get("last_on_ac")
+    if isinstance(previous, bool) and previous is on_ac:
+        return None
+
+    active = bool(state.get("active"))
+    activation = state.get("activation")
+
+    if (
+        on_ac is False
+        and settings.enabled
+        and settings.auto_enable_on_battery
+        and not active
+    ):
+        return "apply"
+
+    if (
+        on_ac is True
+        and settings.restore_on_ac
+        and active
+        and activation == "automatic"
+    ):
+        return "restore"
+
+    return None
+
+
 class SessionController:
     def __init__(self) -> None:
         self.scanner = PowerDeckScanner()
@@ -394,10 +431,24 @@ class SessionController:
     def apply_now(
         self,
         settings: SaverSettings | None = None,
+        *,
+        activation: str = "manual",
     ) -> dict[str, Any]:
+        if activation not in {"manual", "automatic"}:
+            raise ValueError(
+                "activation must be 'manual' or 'automatic'"
+            )
+
         active_settings = settings or load_settings()
+        previous_state = _read_state()
+        last_on_ac = previous_state.get("last_on_ac")
+        if not isinstance(last_on_ac, bool):
+            last_on_ac = _on_ac_power()
+
         state: dict[str, Any] = {
             "active": False,
+            "activation": activation,
+            "last_on_ac": last_on_ac,
             "started_at": time.time(),
             "changes": {},
         }
@@ -417,7 +468,7 @@ class SessionController:
         except Exception:
             self.restore_now()
             raise
-        state["active"] = bool(state.get("changes"))
+        state["active"] = True
         state["completed_at"] = time.time()
         _atomic_json(STATE_PATH, state)
         return state
@@ -539,8 +590,13 @@ class SessionController:
                 restored.append(key)
             else:
                 skipped.append(key)
+        last_on_ac = state.get("last_on_ac")
+        if not isinstance(last_on_ac, bool):
+            last_on_ac = _on_ac_power()
         result = {
             "active": False,
+            "activation": None,
+            "last_on_ac": last_on_ac,
             "restored": restored,
             "skipped": skipped,
             "completed_at": time.time(),
@@ -560,25 +616,30 @@ def run_forever() -> None:
     while True:
         settings = load_settings()
         state = _read_state()
-        active = bool(state.get("active"))
         on_ac = _on_ac_power()
+        action = select_automatic_action(
+            settings,
+            state,
+            on_ac=on_ac,
+        )
         try:
-            if (
-                settings.enabled
-                and settings.auto_enable_on_battery
-                and on_ac is False
-                and not active
-            ):
-                controller.apply_now(settings)
-            elif (
-                settings.restore_on_ac
-                and on_ac is True
-                and active
-            ):
+            if isinstance(on_ac, bool):
+                state["last_on_ac"] = on_ac
+                _atomic_json(STATE_PATH, state)
+
+            if action == "apply":
+                controller.apply_now(
+                    settings,
+                    activation="automatic",
+                )
+            elif action == "restore":
                 controller.restore_now()
         except Exception as error:
+            state = _read_state()
             state["last_error"] = f"{type(error).__name__}: {error}"
             state["last_error_at"] = time.time()
+            if isinstance(on_ac, bool):
+                state["last_on_ac"] = on_ac
             _atomic_json(STATE_PATH, state)
         time.sleep(3.0)
 
@@ -587,4 +648,5 @@ __all__ = [
     "STATE_PATH",
     "SessionController",
     "run_forever",
+    "select_automatic_action",
 ]

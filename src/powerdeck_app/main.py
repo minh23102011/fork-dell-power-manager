@@ -170,8 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ) -> bool:
             self.busy = False
             self._toast(message)
-            if success:
-                self._refresh()
+            self._refresh()
             return False
 
         @staticmethod
@@ -411,25 +410,59 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "then restores only values still owned by PowerDeck."
             )
 
+            runtime_state = SessionController().status()
+            active_now = bool(runtime_state.get("active"))
+
+            runtime = Adw.PreferencesGroup(title="Runtime")
+            active_row = Adw.ActionRow(
+                title="Battery Saver active now",
+                subtitle=(
+                    "Direct control on AC or battery. Manual OFF on "
+                    "battery stays off until the next power transition."
+                ),
+            )
+            active_switch = Gtk.Switch(
+                active=active_now,
+                valign=Gtk.Align.CENTER,
+            )
+            active_row.add_suffix(active_switch)
+            runtime.add(active_row)
+            runtime.add(
+                self._value_row(
+                    "Activation source",
+                    (
+                        str(runtime_state.get("activation"))
+                        if active_now
+                        else "inactive"
+                    ),
+                    (
+                        "A manually enabled session remains active "
+                        "until you turn it off."
+                    ),
+                )
+            )
+            page.add(runtime)
+            self.widgets["active_now"] = active_switch
+
             general = Adw.PreferencesGroup(title="Automation")
             general.add(
                 self._switch_row(
                     "enabled",
-                    "Enable Battery Saver",
+                    "Enable automatic Battery Saver",
                     settings.enabled,
                 )
             )
             general.add(
                 self._switch_row(
                     "auto",
-                    "Apply automatically when unplugged",
+                    "Turn on automatically when unplugged",
                     settings.auto_enable_on_battery,
                 )
             )
             general.add(
                 self._switch_row(
                     "restore",
-                    "Restore when AC reconnects",
+                    "Restore automatic session when AC reconnects",
                     settings.restore_on_ac,
                 )
             )
@@ -540,6 +573,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             row.add_suffix(restore)
             actions.add(row)
             page.add(actions)
+
+            active_switch.connect(
+                "notify::active",
+                self._on_saver_active_changed,
+            )
             return page
 
         def _settings_from_widgets(self) -> SaverSettings:
@@ -580,6 +618,34 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
             )
 
+        def _on_saver_active_changed(
+            self,
+            switch: Any,
+            _parameter: Any,
+        ) -> None:
+            desired = bool(switch.get_active())
+            current = bool(
+                SessionController().status().get("active")
+            )
+            if desired == current:
+                return
+
+            settings = self._settings_from_widgets()
+            save_settings(settings)
+            if desired:
+                self._run_operation(
+                    "Turning Battery Saver on...",
+                    lambda: SessionController().apply_now(
+                        settings,
+                        activation="manual",
+                    ),
+                )
+            else:
+                self._run_operation(
+                    "Turning Battery Saver off...",
+                    lambda: SessionController().restore_now(),
+                )
+
         def _save_saver_settings(self) -> None:
             settings = self._settings_from_widgets()
             save_settings(settings)
@@ -590,7 +656,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             save_settings(settings)
             self._run_operation(
                 "Applying Battery Saver...",
-                lambda: SessionController().apply_now(settings),
+                lambda: SessionController().apply_now(
+                    settings,
+                    activation="manual",
+                ),
             )
 
         def _restore_saver(self) -> None:
