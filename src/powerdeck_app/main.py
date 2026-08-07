@@ -15,6 +15,8 @@ from powerdeck_agent.settings import (
     load_settings,
     save_settings,
 )
+from powerdeck_app.theme import POWERDECK_CSS
+from powerdeck_app.ui_spec import NAVIGATION
 from powerdeck_backends.scanner import DiscoverySnapshot, PowerDeckScanner
 from powerdeck_daemon.client import SystemClient
 
@@ -71,20 +73,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             self.snapshot: DiscoverySnapshot | None = None
             self.busy = False
             self.widgets: dict[str, Any] = {}
+            self._css_provider: Any = None
 
         def do_activate(self) -> None:
             if self.window is None:
                 self.window = Adw.ApplicationWindow(application=self)
                 self.window.set_title("PowerDeck")
-                self.window.set_default_size(900, 680)
-                self.window.set_size_request(540, 480)
+                self.window.set_default_size(1120, 720)
+                self.window.set_size_request(920, 560)
+                self._install_css()
                 self._show_loading()
                 self._refresh()
             self.window.present()
 
+        def _install_css(self) -> None:
+            if self.window is None:
+                return
+            provider = Gtk.CssProvider()
+            provider.load_from_data(
+                POWERDECK_CSS.encode("utf-8")
+            )
+            Gtk.StyleContext.add_provider_for_display(
+                self.window.get_display(),
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            )
+            self._css_provider = provider
+
         def _set_content(self, content: Any) -> None:
             if self.window is None:
-                raise RuntimeError("application window is not initialized")
+                raise RuntimeError(
+                    "application window is not initialized"
+                )
             self.window.set_content(content)
 
         def _toast(self, message: str) -> None:
@@ -94,13 +114,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         def _show_loading(self) -> None:
             box = Gtk.Box(
                 orientation=Gtk.Orientation.VERTICAL,
-                spacing=16,
+                spacing=12,
                 halign=Gtk.Align.CENTER,
                 valign=Gtk.Align.CENTER,
             )
+            box.add_css_class("powerdeck-root")
             box.append(Gtk.Spinner(spinning=True))
+
             title = Gtk.Label(label="Loading PowerDeck...")
-            title.add_css_class("title-2")
+            title.add_css_class("powerdeck-page-title")
             box.append(title)
             self._set_content(box)
 
@@ -165,7 +187,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         def _operation_done(
             self,
-            success: bool,
+            _success: bool,
             message: str,
         ) -> bool:
             self.busy = False
@@ -174,410 +196,837 @@ def main(argv: Sequence[str] | None = None) -> int:
             return False
 
         @staticmethod
-        def _value_row(
-            title: str,
-            value: str,
-            subtitle: str | None = None,
+        def _label(
+            text: str,
+            css_class: str,
+            *,
+            wrap: bool = False,
+            xalign: float = 0.0,
         ) -> Any:
-            row = Adw.ActionRow()
-            row.set_title(title)
-            if subtitle:
-                row.set_subtitle(subtitle)
-            label = Gtk.Label(label=value, xalign=1.0, selectable=True)
-            label.add_css_class("dim-label")
-            row.add_suffix(label)
-            return row
+            label = Gtk.Label(label=text, xalign=xalign)
+            label.add_css_class(css_class)
+            if wrap:
+                label.set_wrap(True)
+                label.set_wrap_mode(2)
+            return label
 
         @staticmethod
-        def _button(label: str, callback: Callable[[], None]) -> Any:
+        def _icon(icon_name: str, size: int = 18) -> Any:
+            image = Gtk.Image.new_from_icon_name(icon_name)
+            image.set_pixel_size(size)
+            return image
+
+        @staticmethod
+        def _button(
+            label: str,
+            callback: Callable[[], None],
+        ) -> Any:
             button = Gtk.Button(label=label)
             button.add_css_class("suggested-action")
-            button.connect("clicked", lambda _button: callback())
+            button.connect(
+                "clicked",
+                lambda _button: callback(),
+            )
             return button
 
-        def _battery_page(self, snapshot: DiscoverySnapshot) -> Any:
+        def _row(
+            self,
+            title: str,
+            *,
+            subtitle: str | None = None,
+            suffix: Any | None = None,
+            tall: bool = False,
+        ) -> Any:
+            row = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=16,
+            )
+            row.add_css_class("powerdeck-card-row")
+            if tall:
+                row.add_css_class("powerdeck-card-row-tall")
+
+            text = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=2,
+            )
+            text.set_hexpand(True)
+            text.append(
+                self._label(
+                    title,
+                    "powerdeck-row-title",
+                )
+            )
+            if subtitle:
+                text.append(
+                    self._label(
+                        subtitle,
+                        "powerdeck-row-subtitle",
+                        wrap=True,
+                    )
+                )
+            row.append(text)
+
+            if suffix is not None:
+                row.append(suffix)
+            return row
+
+        def _value_suffix(self, value: str) -> Any:
+            return self._label(
+                value,
+                "powerdeck-value",
+                xalign=1.0,
+            )
+
+        @staticmethod
+        def _separator() -> Any:
+            separator = Gtk.Separator(
+                orientation=Gtk.Orientation.HORIZONTAL
+            )
+            separator.add_css_class("powerdeck-separator")
+            return separator
+
+        def _card(self, rows: Sequence[Any]) -> Any:
+            card = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=0,
+            )
+            card.add_css_class("powerdeck-card")
+
+            for index, row in enumerate(rows):
+                card.append(row)
+                if index < len(rows) - 1:
+                    card.append(self._separator())
+            return card
+
+        def _section(
+            self,
+            title: str,
+            card: Any,
+        ) -> Any:
+            section = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=8,
+            )
+            section.append(
+                self._label(
+                    title,
+                    "powerdeck-section-title",
+                )
+            )
+            section.append(card)
+            return section
+
+        def _page(
+            self,
+            title: str,
+            description: str,
+        ) -> Any:
+            page = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=24,
+            )
+            page.add_css_class("powerdeck-page")
+            page.set_hexpand(True)
+
+            heading = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=6,
+            )
+            heading.append(
+                self._label(
+                    title,
+                    "powerdeck-page-title",
+                )
+            )
+            heading.append(
+                self._label(
+                    description,
+                    "powerdeck-page-description",
+                    wrap=True,
+                )
+            )
+            page.append(heading)
+            return page
+
+        def _scrolled_page(self, page: Any) -> Any:
+            clamp = Adw.Clamp()
+            clamp.set_maximum_size(1040)
+            clamp.set_tightening_threshold(760)
+            clamp.set_child(page)
+
+            scroller = Gtk.ScrolledWindow()
+            scroller.set_policy(
+                Gtk.PolicyType.NEVER,
+                Gtk.PolicyType.AUTOMATIC,
+            )
+            scroller.set_child(clamp)
+            return scroller
+
+        def _battery_page(
+            self,
+            snapshot: DiscoverySnapshot,
+        ) -> Any:
             status = snapshot.status
-            battery = status.batteries[0] if status.batteries else None
-            page = Adw.PreferencesPage()
-            page.set_title("Battery")
-            page.set_description(
-                "Battery condition and Dell-compatible charge controls."
+            battery = (
+                status.batteries[0]
+                if status.batteries
+                else None
+            )
+            page = self._page(
+                "Battery",
+                (
+                    "Battery condition and Dell-compatible "
+                    "charge controls."
+                ),
             )
 
-            group = Adw.PreferencesGroup(title="Status")
-            group.add(
-                self._value_row(
-                    "Battery",
-                    (
-                        "Not detected"
-                        if battery is None
-                        else (
-                            f"{battery.name} - "
-                            f"{battery.capacity_percent}%"
-                        )
-                    ),
+            battery_value = (
+                "Not detected"
+                if battery is None
+                else (
+                    f"{battery.name} · "
+                    f"{battery.capacity_percent}%"
                 )
             )
-            group.add(
-                self._value_row(
-                    "Health",
-                    (
-                        "Unknown"
-                        if battery is None
-                        or battery.health_percent is None
-                        else f"{battery.health_percent:.1f}%"
-                    ),
+            health_value = (
+                "Unknown"
+                if battery is None
+                or battery.health_percent is None
+                else f"{battery.health_percent:.1f}%"
+            )
+            ac_value = (
+                "Unknown"
+                if status.on_ac_power is None
+                else (
+                    "Connected"
+                    if status.on_ac_power
+                    else "Disconnected"
                 )
             )
-            group.add(
-                self._value_row(
-                    "AC adapter",
-                    (
-                        "Unknown"
-                        if status.on_ac_power is None
-                        else (
-                            "Connected"
-                            if status.on_ac_power
-                            else "Disconnected"
-                        )
-                    ),
-                )
-            )
-            page.add(group)
 
-            controls = Adw.PreferencesGroup(title="Charging")
+            status_card = self._card(
+                (
+                    self._row(
+                        "Battery",
+                        suffix=self._value_suffix(
+                            battery_value
+                        ),
+                    ),
+                    self._row(
+                        "Health",
+                        suffix=self._value_suffix(
+                            health_value
+                        ),
+                    ),
+                    self._row(
+                        "AC adapter",
+                        suffix=self._value_suffix(ac_value),
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Status",
+                    status_card,
+                )
+            )
+
             modes = [
                 mode.value
-                for mode in snapshot.capabilities.charge.supported_modes
+                for mode
+                in snapshot.capabilities.charge.supported_modes
             ]
             current_mode = (
                 status.charge.mode.value
                 if status.charge.mode is not None
                 else ""
             )
-            mode_row = Adw.ActionRow(title="Charging mode")
-            mode_dropdown = Gtk.DropDown.new_from_strings(modes)
+
+            mode_controls = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=8,
+                valign=Gtk.Align.CENTER,
+            )
+            mode_dropdown = Gtk.DropDown.new_from_strings(
+                modes
+            )
+            mode_dropdown.set_size_request(150, -1)
             if current_mode in modes:
-                mode_dropdown.set_selected(modes.index(current_mode))
-            mode_row.add_suffix(mode_dropdown)
-            mode_row.add_suffix(
+                mode_dropdown.set_selected(
+                    modes.index(current_mode)
+                )
+            mode_controls.append(mode_dropdown)
+            mode_controls.append(
                 self._button(
                     "Apply",
-                    lambda: self._apply_charge_mode(mode_dropdown),
-                )
-            )
-            controls.add(mode_row)
-
-            interval = status.charge.interval
-            threshold_row = Adw.ActionRow(
-                title="Custom thresholds",
-                subtitle="Start and stop charging percentages.",
-            )
-            start = Gtk.SpinButton.new_with_range(50, 95, 1)
-            end = Gtk.SpinButton.new_with_range(55, 100, 1)
-            start.set_value(
-                50 if interval is None else interval.start_percent
-            )
-            end.set_value(
-                80 if interval is None else interval.end_percent
-            )
-            threshold_row.add_suffix(Gtk.Label(label="Start"))
-            threshold_row.add_suffix(start)
-            threshold_row.add_suffix(Gtk.Label(label="End"))
-            threshold_row.add_suffix(end)
-            threshold_row.add_suffix(
-                self._button(
-                    "Apply",
-                    lambda: self._apply_thresholds(start, end),
-                )
-            )
-            controls.add(threshold_row)
-            page.add(controls)
-            return page
-
-        def _thermal_page(self, snapshot: DiscoverySnapshot) -> Any:
-            page = Adw.PreferencesPage()
-            page.set_title("Thermal Mode")
-            page.set_description(
-                "Apply a kernel platform profile through powerdeckd."
-            )
-            status = snapshot.status
-            capabilities = snapshot.capabilities
-
-            info = Adw.PreferencesGroup(title="Current state")
-            info.add(
-                self._value_row(
-                    "Current thermal mode",
-                    (
-                        "Unknown"
-                        if status.thermal.current_profile is None
-                        else status.thermal.current_profile.value
+                    lambda: self._apply_charge_mode(
+                        mode_dropdown
                     ),
                 )
             )
-            info.add(
-                self._value_row(
-                    "OS power profile",
-                    status.power_manager.current_profile or "Unknown",
+
+            interval = status.charge.interval
+            start = Gtk.SpinButton.new_with_range(
+                50,
+                95,
+                1,
+            )
+            end = Gtk.SpinButton.new_with_range(
+                55,
+                100,
+                1,
+            )
+            start.set_value(
+                50
+                if interval is None
+                else interval.start_percent
+            )
+            end.set_value(
+                80
+                if interval is None
+                else interval.end_percent
+            )
+
+            threshold_controls = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=7,
+                valign=Gtk.Align.CENTER,
+            )
+            threshold_controls.append(
+                self._label(
+                    "Start",
+                    "powerdeck-row-subtitle",
                 )
             )
-            info.add(
-                self._value_row(
-                    "CPU governor",
-                    capabilities.cpu.current_governor or "Unknown",
+            threshold_controls.append(start)
+            threshold_controls.append(
+                self._label(
+                    "End",
+                    "powerdeck-row-subtitle",
                 )
             )
-            page.add(info)
+            threshold_controls.append(end)
+            threshold_controls.append(
+                self._button(
+                    "Apply",
+                    lambda: self._apply_thresholds(
+                        start,
+                        end,
+                    ),
+                )
+            )
+
+            charging_card = self._card(
+                (
+                    self._row(
+                        "Charging mode",
+                        subtitle=(
+                            "Select how the battery is charged."
+                        ),
+                        suffix=mode_controls,
+                        tall=True,
+                    ),
+                    self._row(
+                        "Custom thresholds",
+                        subtitle=(
+                            "Start and stop charging "
+                            "percentages."
+                        ),
+                        suffix=threshold_controls,
+                        tall=True,
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Charging",
+                    charging_card,
+                )
+            )
+
+            note = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=10,
+            )
+            note.add_css_class("powerdeck-quiet-box")
+            note.append(
+                self._icon(
+                    "dialog-information-symbolic",
+                    16,
+                )
+            )
+            note.append(
+                self._label(
+                    (
+                        "PowerDeck verifies each write and "
+                        "rolls back on mismatch."
+                    ),
+                    "powerdeck-quiet-text",
+                    wrap=True,
+                )
+            )
+            page.append(note)
+            return self._scrolled_page(page)
+
+        def _thermal_page(
+            self,
+            snapshot: DiscoverySnapshot,
+        ) -> Any:
+            status = snapshot.status
+            capabilities = snapshot.capabilities
+
+            page = self._page(
+                "Thermal",
+                (
+                    "Apply a kernel platform profile "
+                    "through powerdeckd."
+                ),
+            )
+
+            thermal_value = (
+                "Unknown"
+                if status.thermal.current_profile is None
+                else status.thermal.current_profile.value
+            )
+            profile_value = (
+                status.power_manager.current_profile
+                or "Unknown"
+            )
+            governor_value = (
+                capabilities.cpu.current_governor
+                or "Unknown"
+            )
+
+            current_card = self._card(
+                (
+                    self._row(
+                        "Current thermal mode",
+                        suffix=self._value_suffix(
+                            thermal_value
+                        ),
+                    ),
+                    self._row(
+                        "OS power profile",
+                        suffix=self._value_suffix(
+                            profile_value
+                        ),
+                    ),
+                    self._row(
+                        "CPU governor",
+                        suffix=self._value_suffix(
+                            governor_value
+                        ),
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Current state",
+                    current_card,
+                )
+            )
 
             modes = [
                 profile.value
-                for profile in capabilities.thermal.supported_profiles
+                for profile
+                in capabilities.thermal.supported_profiles
             ]
             current = (
                 status.thermal.current_profile.value
-                if status.thermal.current_profile is not None
+                if status.thermal.current_profile
+                is not None
                 else ""
             )
-            group = Adw.PreferencesGroup(title="Profile")
-            row = Adw.ActionRow(title="Thermal mode")
+
+            controls = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=8,
+            )
             dropdown = Gtk.DropDown.new_from_strings(modes)
+            dropdown.set_size_request(170, -1)
             if current in modes:
-                dropdown.set_selected(modes.index(current))
-            row.add_suffix(dropdown)
-            row.add_suffix(
+                dropdown.set_selected(
+                    modes.index(current)
+                )
+            controls.append(dropdown)
+            controls.append(
                 self._button(
                     "Apply",
-                    lambda: self._apply_thermal(dropdown),
+                    lambda: self._apply_thermal(
+                        dropdown
+                    ),
                 )
             )
-            group.add(row)
-            page.add(group)
-            return page
 
-        def _switch_row(
+            profile_card = self._card(
+                (
+                    self._row(
+                        "Thermal mode",
+                        subtitle=(
+                            "Choose the laptop thermal "
+                            "management profile."
+                        ),
+                        suffix=controls,
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Profile",
+                    profile_card,
+                )
+            )
+            return self._scrolled_page(page)
+
+        def _switch(
             self,
             key: str,
-            title: str,
             active: bool,
         ) -> Any:
-            row = Adw.ActionRow(title=title)
-            widget = Gtk.Switch(active=active, valign=Gtk.Align.CENTER)
-            row.add_suffix(widget)
+            widget = Gtk.Switch(
+                active=active,
+                valign=Gtk.Align.CENTER,
+            )
             self.widgets[key] = widget
-            return row
+            return widget
 
-        def _spin_row(
+        def _spin(
             self,
             key: str,
-            title: str,
             value: float,
             minimum: float,
             maximum: float,
             step: float,
         ) -> Any:
-            row = Adw.ActionRow(title=title)
             widget = Gtk.SpinButton.new_with_range(
                 minimum,
                 maximum,
                 step,
             )
             widget.set_value(value)
-            row.add_suffix(widget)
             self.widgets[key] = widget
-            return row
+            return widget
 
-        def _combo_row(
+        def _combo(
             self,
             key: str,
-            title: str,
             values: list[str],
             selected: str,
         ) -> Any:
-            row = Adw.ActionRow(title=title)
             widget = Gtk.DropDown.new_from_strings(values)
             if selected in values:
-                widget.set_selected(values.index(selected))
-            row.add_suffix(widget)
+                widget.set_selected(
+                    values.index(selected)
+                )
             self.widgets[key] = widget
-            return row
+            return widget
 
         def _saver_page(self) -> Any:
             settings = load_settings()
-            page = Adw.PreferencesPage()
-            page.set_title("Battery Saver")
-            page.set_description(
-                "Turn Battery Saver on or off directly, or configure "
-                "optional automatic behavior."
-            )
-
             runtime_state = SessionController().status()
-            active_now = bool(runtime_state.get("active"))
+            active_now = bool(
+                runtime_state.get("active")
+            )
 
-            runtime = Adw.PreferencesGroup(title="Runtime")
-            active_row = Adw.ActionRow(
-                title="Battery Saver",
-                subtitle=(
-                    "Turn on or off immediately on AC or battery. "
-                    "Turning off restores only settings PowerDeck "
-                    "still owns."
+            page = self._page(
+                "Battery Saver",
+                (
+                    "Turn Battery Saver on or off directly, "
+                    "or configure optional automation."
                 ),
             )
-            active_switch = Gtk.Switch(
-                active=active_now,
-                valign=Gtk.Align.CENTER,
+
+            active_switch = self._switch(
+                "active_now",
+                active_now,
             )
-            active_row.add_suffix(active_switch)
-            runtime.add(active_row)
-            runtime.add(
-                self._value_row(
-                    "Activation source",
-                    (
-                        str(runtime_state.get("activation"))
-                        if active_now
-                        else "inactive"
+            activation = (
+                str(runtime_state.get("activation"))
+                if active_now
+                else "inactive"
+            )
+            activation_badge = self._label(
+                activation,
+                "powerdeck-badge",
+                xalign=1.0,
+            )
+
+            runtime_card = self._card(
+                (
+                    self._row(
+                        "Battery Saver",
+                        subtitle=(
+                            "Immediate control on AC or "
+                            "battery power."
+                        ),
+                        suffix=active_switch,
+                        tall=True,
                     ),
-                    (
-                        "A manually enabled session remains active "
-                        "until you turn it off."
+                    self._row(
+                        "Activation source",
+                        subtitle=(
+                            "Shows how the current session "
+                            "was activated."
+                        ),
+                        suffix=activation_badge,
                     ),
                 )
             )
-            page.add(runtime)
-            self.widgets["active_now"] = active_switch
+            page.append(
+                self._section(
+                    "Runtime",
+                    runtime_card,
+                )
+            )
 
-            general = Adw.PreferencesGroup(title="Automation")
-            general.add(
-                self._switch_row(
-                    "enabled",
-                    "Enable automatic Battery Saver",
-                    settings.enabled,
+            automation_card = self._card(
+                (
+                    self._row(
+                        "Enable automatic Battery Saver",
+                        subtitle=(
+                            "Allow the user service to react "
+                            "to AC transitions."
+                        ),
+                        suffix=self._switch(
+                            "enabled",
+                            settings.enabled,
+                        ),
+                    ),
+                    self._row(
+                        "Turn on automatically when unplugged",
+                        subtitle=(
+                            "Activate Battery Saver when "
+                            "battery power begins."
+                        ),
+                        suffix=self._switch(
+                            "auto",
+                            settings.auto_enable_on_battery,
+                        ),
+                    ),
+                    self._row(
+                        "Restore automatically when AC reconnects",
+                        subtitle=(
+                            "Restore values still owned by "
+                            "PowerDeck."
+                        ),
+                        suffix=self._switch(
+                            "restore",
+                            settings.restore_on_ac,
+                        ),
+                    ),
                 )
             )
-            general.add(
-                self._switch_row(
-                    "auto",
-                    "Turn on automatically when unplugged",
-                    settings.auto_enable_on_battery,
+            page.append(
+                self._section(
+                    "Automation",
+                    automation_card,
                 )
             )
-            general.add(
-                self._switch_row(
-                    "restore",
-                    "Restore automatic session when AC reconnects",
-                    settings.restore_on_ac,
-                )
-            )
-            page.add(general)
 
-            display = Adw.PreferencesGroup(title="Display")
-            display.add(
-                self._spin_row(
-                    "brightness",
-                    "Brightness cap (%)",
-                    settings.brightness_cap_percent,
-                    1,
-                    100,
-                    1,
+            display_card = self._card(
+                (
+                    self._row(
+                        "Brightness cap (%)",
+                        subtitle=(
+                            "Limit maximum screen brightness."
+                        ),
+                        suffix=self._spin(
+                            "brightness",
+                            settings.brightness_cap_percent,
+                            1,
+                            100,
+                            1,
+                        ),
+                    ),
+                    self._row(
+                        "Only lower brightness",
+                        subtitle=(
+                            "Never raise brightness above "
+                            "the current level."
+                        ),
+                        suffix=self._switch(
+                            "only_lower",
+                            settings.only_lower_brightness,
+                        ),
+                    ),
+                    self._row(
+                        "Target refresh rate (Hz)",
+                        subtitle=(
+                            "Choose the internal display "
+                            "refresh target."
+                        ),
+                        suffix=self._spin(
+                            "refresh",
+                            settings.target_refresh_rate_hz,
+                            30,
+                            240,
+                            1,
+                        ),
+                    ),
                 )
             )
-            display.add(
-                self._switch_row(
-                    "only_lower",
-                    "Only lower brightness",
-                    settings.only_lower_brightness,
-                )
+            display_section = self._section(
+                "Display",
+                display_card,
             )
-            display.add(
-                self._spin_row(
-                    "refresh",
-                    "Target refresh rate (Hz)",
-                    settings.target_refresh_rate_hz,
-                    30,
-                    240,
-                    1,
-                )
-            )
-            page.add(display)
+            display_section.set_hexpand(True)
 
-            performance = Adw.PreferencesGroup(title="Performance")
-            performance.add(
-                self._combo_row(
-                    "power_profile",
-                    "OS power profile",
-                    ["power-saver", "balanced", "performance"],
-                    settings.power_profile,
+            performance_card = self._card(
+                (
+                    self._row(
+                        "OS power profile",
+                        subtitle=(
+                            "Select the operating system "
+                            "power profile."
+                        ),
+                        suffix=self._combo(
+                            "power_profile",
+                            [
+                                "power-saver",
+                                "balanced",
+                                "performance",
+                            ],
+                            settings.power_profile,
+                        ),
+                    ),
+                    self._row(
+                        "Thermal profile",
+                        subtitle=(
+                            "Select the thermal management "
+                            "profile."
+                        ),
+                        suffix=self._combo(
+                            "saver_thermal",
+                            [
+                                "quiet",
+                                "cool",
+                                "balanced",
+                                "performance",
+                            ],
+                            settings.thermal_profile,
+                        ),
+                    ),
+                    self._row(
+                        "Disable CPU turbo",
+                        subtitle=(
+                            "Prevent turbo boost while "
+                            "Battery Saver is active."
+                        ),
+                        suffix=self._switch(
+                            "turbo",
+                            settings.disable_turbo,
+                        ),
+                    ),
+                    self._row(
+                        "Maximum CPU performance (%)",
+                        subtitle=(
+                            "Limit Intel P-state maximum "
+                            "performance."
+                        ),
+                        suffix=self._spin(
+                            "cpu_cap",
+                            settings.max_performance_percent,
+                            1,
+                            100,
+                            1,
+                        ),
+                    ),
                 )
             )
-            performance.add(
-                self._combo_row(
-                    "saver_thermal",
-                    "Thermal profile",
-                    ["quiet", "cool", "balanced", "performance"],
-                    settings.thermal_profile,
-                )
+            performance_section = self._section(
+                "Performance",
+                performance_card,
             )
-            performance.add(
-                self._switch_row(
-                    "turbo",
-                    "Disable CPU turbo",
-                    settings.disable_turbo,
-                )
-            )
-            performance.add(
-                self._spin_row(
-                    "cpu_cap",
-                    "Maximum CPU performance (%)",
-                    settings.max_performance_percent,
-                    1,
-                    100,
-                    1,
-                )
-            )
-            page.add(performance)
+            performance_section.set_hexpand(True)
 
-            devices = Adw.PreferencesGroup(title="Devices")
-            devices.add(
-                self._spin_row(
-                    "keyboard",
-                    "Keyboard backlight level",
-                    settings.keyboard_backlight_level,
-                    0,
-                    2,
-                    1,
-                )
+            columns = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=16,
             )
-            devices.add(
-                self._switch_row(
-                    "mute",
-                    "Mute audio output",
-                    settings.mute_audio,
-                )
-            )
-            page.add(devices)
+            columns.add_css_class("powerdeck-two-column")
+            columns.set_homogeneous(True)
+            columns.append(display_section)
+            columns.append(performance_section)
+            page.append(columns)
 
-            actions = Adw.PreferencesGroup(title="Settings")
-            row = Adw.ActionRow(
-                title="Battery Saver settings",
-                subtitle=(
-                    "Save the values used by the main switch and "
-                    "automatic activation."
-                ),
+            devices_card = self._card(
+                (
+                    self._row(
+                        "Keyboard backlight level",
+                        subtitle=(
+                            "Set the keyboard backlight "
+                            "brightness."
+                        ),
+                        suffix=self._spin(
+                            "keyboard",
+                            settings.keyboard_backlight_level,
+                            0,
+                            2,
+                            1,
+                        ),
+                    ),
+                    self._row(
+                        "Mute audio output",
+                        subtitle=(
+                            "Mute the default output while "
+                            "Battery Saver is active."
+                        ),
+                        suffix=self._switch(
+                            "mute",
+                            settings.mute_audio,
+                        ),
+                    ),
+                )
             )
-            row.add_suffix(
-                self._button("Save", self._save_saver_settings)
+            page.append(
+                self._section(
+                    "Devices",
+                    devices_card,
+                )
             )
-            actions.add(row)
-            page.add(actions)
+
+            settings_controls = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=8,
+            )
+            settings_controls.append(
+                self._button(
+                    "Save settings",
+                    self._save_saver_settings,
+                )
+            )
+            settings_card = self._card(
+                (
+                    self._row(
+                        "Battery Saver settings",
+                        subtitle=(
+                            "Save values used by the runtime "
+                            "switch and automation."
+                        ),
+                        suffix=settings_controls,
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Settings",
+                    settings_card,
+                )
+            )
 
             active_switch.connect(
                 "notify::active",
                 self._on_saver_active_changed,
             )
-            return page
+            return self._scrolled_page(page)
 
-        def _settings_from_widgets(self) -> SaverSettings:
+        def _settings_from_widgets(
+            self,
+        ) -> SaverSettings:
             return SaverSettings(
-                enabled=bool(self.widgets["enabled"].get_active()),
+                enabled=bool(
+                    self.widgets["enabled"].get_active()
+                ),
                 auto_enable_on_battery=bool(
                     self.widgets["auto"].get_active()
                 ),
@@ -585,10 +1034,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     self.widgets["restore"].get_active()
                 ),
                 brightness_cap_percent=int(
-                    self.widgets["brightness"].get_value()
+                    self.widgets[
+                        "brightness"
+                    ].get_value()
                 ),
                 only_lower_brightness=bool(
-                    self.widgets["only_lower"].get_active()
+                    self.widgets[
+                        "only_lower"
+                    ].get_active()
                 ),
                 target_refresh_rate_hz=float(
                     self.widgets["refresh"].get_value()
@@ -620,13 +1073,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ) -> None:
             desired = bool(switch.get_active())
             current = bool(
-                SessionController().status().get("active")
+                SessionController().status().get(
+                    "active"
+                )
             )
             if desired == current:
                 return
 
             settings = self._settings_from_widgets()
             save_settings(settings)
+
             if desired:
                 self._run_operation(
                     "Turning Battery Saver on...",
@@ -644,23 +1100,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         def _save_saver_settings(self) -> None:
             settings = self._settings_from_widgets()
             save_settings(settings)
-            self._toast("Battery Saver settings saved.")
+            self._toast(
+                "Battery Saver settings saved."
+            )
 
-        def _apply_thermal(self, dropdown: Any) -> None:
+        def _apply_thermal(
+            self,
+            dropdown: Any,
+        ) -> None:
             profile = _selected_text(dropdown)
             self._run_operation(
                 f"Applying thermal mode {profile}...",
                 lambda: asyncio.run(
-                    _client_call("set_thermal_profile", profile)
+                    _client_call(
+                        "set_thermal_profile",
+                        profile,
+                    )
                 ),
             )
 
-        def _apply_charge_mode(self, dropdown: Any) -> None:
+        def _apply_charge_mode(
+            self,
+            dropdown: Any,
+        ) -> None:
             mode = _selected_text(dropdown)
             self._run_operation(
                 f"Applying charging mode {mode}...",
                 lambda: asyncio.run(
-                    _client_call("set_charge_mode", mode)
+                    _client_call(
+                        "set_charge_mode",
+                        mode,
+                    )
                 ),
             )
 
@@ -672,7 +1142,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             start_value = int(start.get_value())
             end_value = int(end.get_value())
             self._run_operation(
-                "Applying custom charging thresholds...",
+                (
+                    "Applying custom charging "
+                    "thresholds..."
+                ),
                 lambda: asyncio.run(
                     _client_call(
                         "set_charge_thresholds",
@@ -682,33 +1155,191 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
             )
 
-        def _render(self, snapshot: DiscoverySnapshot) -> bool:
+        def _header_status(
+            self,
+            snapshot: DiscoverySnapshot,
+        ) -> Any:
+            status = snapshot.status
+            battery = (
+                status.batteries[0]
+                if status.batteries
+                else None
+            )
+
+            summary = (
+                "Battery unavailable"
+                if battery is None
+                else (
+                    f"{battery.capacity_percent}%"
+                    " · "
+                    + (
+                        "AC"
+                        if status.on_ac_power
+                        else "Battery"
+                    )
+                )
+            )
+
+            chip = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=6,
+            )
+            chip.add_css_class(
+                "powerdeck-status-chip"
+            )
+            chip.append(
+                self._icon(
+                    "battery-symbolic",
+                    15,
+                )
+            )
+            chip.append(
+                self._label(
+                    summary,
+                    "powerdeck-value",
+                )
+            )
+            return chip
+
+        def _brand(self) -> Any:
+            brand = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=8,
+            )
+            brand.append(
+                self._icon(
+                    "power-profile-performance-symbolic",
+                    19,
+                )
+            )
+            brand.append(
+                self._label(
+                    "PowerDeck",
+                    "powerdeck-brand",
+                )
+            )
+            return brand
+
+        def _navigation_button(
+            self,
+            key: str,
+            title: str,
+            icon_name: str,
+            group: Any | None,
+        ) -> Any:
+            button = Gtk.ToggleButton()
+            button.add_css_class("powerdeck-nav")
+            if group is not None:
+                button.set_group(group)
+
+            content = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=11,
+            )
+            content.append(
+                self._icon(
+                    icon_name,
+                    18,
+                )
+            )
+            content.append(
+                self._label(
+                    title,
+                    "powerdeck-row-title",
+                )
+            )
+            button.set_child(content)
+            button.connect(
+                "toggled",
+                self._on_navigation_toggled,
+                key,
+            )
+            return button
+
+        def _on_navigation_toggled(
+            self,
+            button: Any,
+            key: str,
+        ) -> None:
+            if (
+                button.get_active()
+                and self.stack is not None
+            ):
+                self.stack.set_visible_child_name(key)
+
+        def _sidebar(self) -> Any:
+            sidebar = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL,
+                spacing=6,
+            )
+            sidebar.add_css_class(
+                "powerdeck-sidebar"
+            )
+            sidebar.set_size_request(210, -1)
+
+            first: Any = None
+            for item in NAVIGATION:
+                button = self._navigation_button(
+                    item.key,
+                    item.title,
+                    item.icon_name,
+                    first,
+                )
+                if first is None:
+                    first = button
+                sidebar.append(button)
+
+            spacer = Gtk.Box()
+            spacer.set_vexpand(True)
+            sidebar.append(spacer)
+
+            version = self._label(
+                "v0.1 candidate",
+                "powerdeck-row-subtitle",
+            )
+            version.set_margin_start(12)
+            version.set_margin_bottom(8)
+            sidebar.append(version)
+
+            if first is not None:
+                first.set_active(True)
+            return sidebar
+
+        def _render(
+            self,
+            snapshot: DiscoverySnapshot,
+        ) -> bool:
             self.busy = False
             self.snapshot = snapshot
             self.widgets.clear()
 
-            stack = Adw.ViewStack()
+            stack = Gtk.Stack()
+            stack.set_hexpand(True)
             stack.set_vexpand(True)
-            stack.add_titled(
+            stack.set_transition_type(
+                Gtk.StackTransitionType.NONE
+            )
+            stack.add_named(
                 self._battery_page(snapshot),
                 "battery",
-                "Battery",
             )
-            stack.add_titled(
+            stack.add_named(
                 self._thermal_page(snapshot),
                 "thermal",
-                "Thermal Mode",
             )
-            stack.add_titled(
+            stack.add_named(
                 self._saver_page(),
                 "saver",
-                "Battery Saver",
             )
             self.stack = stack
 
-            switcher = Adw.ViewSwitcher()
-            switcher.set_stack(stack)
-            switcher.set_policy(Adw.ViewSwitcherPolicy.WIDE)
+            body = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=0,
+            )
+            body.add_css_class("powerdeck-root")
+            body.append(self._sidebar())
+            body.append(stack)
 
             refresh = Gtk.Button(
                 icon_name="view-refresh-symbolic",
@@ -720,22 +1351,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
             header = Adw.HeaderBar()
-            header.set_title_widget(switcher)
+            header.set_title_widget(Gtk.Box())
+            header.pack_start(self._brand())
             header.pack_end(refresh)
-
-            switcher_bar = Adw.ViewSwitcherBar()
-            switcher_bar.set_stack(stack)
-            switcher_bar.set_reveal(True)
-
-            content = Gtk.Box(
-                orientation=Gtk.Orientation.VERTICAL,
+            header.pack_end(
+                self._header_status(snapshot)
             )
-            content.append(stack)
-            content.append(switcher_bar)
 
             toolbar = Adw.ToolbarView()
             toolbar.add_top_bar(header)
-            toolbar.set_content(content)
+            toolbar.set_content(body)
 
             overlay = Adw.ToastOverlay()
             overlay.set_child(toolbar)
@@ -744,7 +1369,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return False
 
     app = PowerDeckApplication()
-    return int(app.run(list(sys.argv if argv is None else argv)))
+    return int(
+        app.run(
+            list(
+                sys.argv
+                if argv is None
+                else argv
+            )
+        )
+    )
 
 
 if __name__ == "__main__":
