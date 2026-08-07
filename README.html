@@ -548,16 +548,52 @@
         </div>
       </section>
 
-      <section class="readme-section" id="install">
+<section class="readme-section" id="install">
         <h2>Install the local candidate</h2>
         <p>
-          PowerDeck currently targets an Arch-style system with
-          power-profiles-daemon, PipeWire, Niri, and Dell-compatible kernel
-          interfaces.
+          PowerDeck depends on native Linux services as well as Python
+          packages. <code>pip</code> cannot install GTK, Libadwaita, Polkit,
+          brightness tools, or power-profiles-daemon.
         </p>
 
+        <h3>Required on Arch/CachyOS</h3>
+        <pre><code>sudo pacman -S --needed \
+    git \
+    python \
+    python-dbus-next \
+    python-gobject \
+    gtk4 \
+    libadwaita \
+    polkit \
+    brightnessctl \
+    power-profiles-daemon</code></pre>
+
+        <h3>Optional feature dependencies</h3>
+        <div class="status-table" role="table" aria-label="Optional dependencies">
+          <div class="status-row status-head" role="row">
+            <span role="columnheader">Package or tool</span>
+            <span role="columnheader">Feature</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell"><code>niri</code></span>
+            <span role="cell">Internal-panel refresh-rate switching</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell"><code>wireplumber</code> / <code>wpctl</code></span>
+            <span role="cell">Optional audio mute and restore</span>
+          </div>
+        </div>
+
+        <p>
+          Missing optional tools do not prevent the application from opening.
+          PowerDeck reports or skips only the affected Battery Saver action.
+        </p>
+
+        <h3>Clone and install</h3>
         <pre><code>git clone https://github.com/minh23102011/fork-dell-power-manager.git
 cd fork-dell-power-manager
+
+./scripts/check-dependencies.sh
 
 python -m venv .venv
 source .venv/bin/activate.fish
@@ -568,6 +604,12 @@ deactivate
 ./scripts/install-local-v0.1.sh
 ./scripts/v0.1-check.sh
 ./powerdeck</code></pre>
+
+        <p>
+          The installer repeats the required package installation with
+          <code>pacman -S --needed</code>, then configures powerdeckd,
+          system D-Bus, Polkit, the user agent, and the desktop entry.
+        </p>
       </section>
 
       <section class="readme-section">

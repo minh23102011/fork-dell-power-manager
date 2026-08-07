@@ -118,23 +118,58 @@ The current hardware baseline is:
 
 PowerDeck is capability-driven, but broader laptop support has not yet been certified.
 
+## System dependencies
+
+PowerDeck uses both Python packages and native Linux services. `pip` does not
+install GTK, Libadwaita, Polkit, brightness tools, or power-profiles-daemon.
+
+### Required on Arch/CachyOS
+
+```fish
+sudo pacman -S --needed \
+    git \
+    python \
+    python-dbus-next \
+    python-gobject \
+    gtk4 \
+    libadwaita \
+    polkit \
+    brightnessctl \
+    power-profiles-daemon
+```
+
+### Optional feature dependencies
+
+| Package/tool | Feature |
+|---|---|
+| `niri` | Internal-panel refresh-rate switching |
+| `wireplumber` / `wpctl` | Optional audio mute and restore |
+
+PowerDeck can still launch without the optional tools. Their related Battery
+Saver actions are skipped or reported as unavailable.
+
 ## Install the local v0.1 candidate
 
 ```fish
 git clone https://github.com/minh23102011/fork-dell-power-manager.git
 cd fork-dell-power-manager
 
+./scripts/check-dependencies.sh
+
 python -m venv .venv
 source .venv/bin/activate.fish
+
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 
 deactivate
 ./scripts/install-local-v0.1.sh
+./scripts/v0.1-check.sh
 ./powerdeck
 ```
 
-The installer configures:
+The installer repeats the required `pacman -S --needed` step so an existing
+clone can repair missing native packages. It then configures:
 
 - the `powerdeckd` system service;
 - system D-Bus activation;
@@ -142,6 +177,11 @@ The installer configures:
 - the `powerdeck-agent` user service;
 - a desktop entry.
 
+To inspect dependencies again:
+
+```fish
+./scripts/check-dependencies.sh
+```
 ## Verify before hardware writes
 
 ```fish
