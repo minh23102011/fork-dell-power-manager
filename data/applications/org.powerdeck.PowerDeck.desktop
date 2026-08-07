@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=PowerDeck
-Comment=Battery, thermal, and Battery Saver controls
-Exec=@PROJECT_ROOT@/powerdeck
+Comment=Native battery, thermal, CPU and Battery Saver controls
+Exec=powerdeck
 Icon=battery-good-symbolic
 Terminal=false
 Categories=Settings;System;

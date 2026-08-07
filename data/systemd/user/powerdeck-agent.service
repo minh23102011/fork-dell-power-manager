@@ -1,13 +1,19 @@
 [Unit]
-Description=PowerDeck Battery Saver session agent
-After=graphical-session.target
-PartOf=graphical-session.target
+Description=PowerDeck native user Battery Saver agent
+Documentation=https://github.com/minh23102011/powerdeck
+After=dbus.service
 
 [Service]
-Type=simple
-ExecStart=@PROJECT_ROOT@/scripts/run-agent.sh
+Type=dbus
+BusName=org.powerdeck.Agent1
+ExecStart=/usr/lib/powerdeck/powerdeck-agent
 Restart=on-failure
-RestartSec=3
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
 
 [Install]
 WantedBy=default.target

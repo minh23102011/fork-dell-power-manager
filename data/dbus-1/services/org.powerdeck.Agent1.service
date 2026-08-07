@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.powerdeck.Agent1
+Exec=/usr/lib/powerdeck/powerdeck-agent
+SystemdService=powerdeck-agent.service

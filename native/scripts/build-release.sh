@@ -29,5 +29,7 @@ printf '%s\n' '==> Building Qt6 GUI'
 cmake --build "$ROOT/qt/build" --parallel
 
 printf '%s\n' '==> Native release build complete'
-printf '%s\n' "Rust binaries: $ROOT/target/release"
-printf '%s\n' "Qt binary:      $ROOT/qt/build/powerdeck-native"
+printf '%s\n' "Daemon: $ROOT/target/release/powerdeckd-native"
+printf '%s\n' "Agent:  $ROOT/target/release/powerdeck-agent-native"
+printf '%s\n' "CLI:    $ROOT/target/release/powerdeckctl-native"
+printf '%s\n' "GUI:    $ROOT/qt/build/powerdeck-native"

@@ -1,39 +1,53 @@
-# PowerDeck native runtime candidate
+# PowerDeck native
 
-This tree completes the native migration candidate while preserving the existing
-PowerDeck D-Bus privilege boundary and rollback behavior.
+PowerDeck's runtime is native-only:
 
-## Components
+- Rust power-control core.
+- Rust privileged system D-Bus daemon.
+- Rust user Battery Saver agent.
+- Rust telemetry plus a tiny C `perf_event_open(2)` helper.
+- Rust command-line client.
+- C++20 Qt6 Widgets + QtDBus GUI.
 
-- `powerdeck-core-native` — Rust transactional battery, thermal and Intel P-state control.
-- `powerdeck-telemetry-native` — Rust telemetry with a tiny C `perf_event_open(2)` ABI helper.
-- `powerdeckd-native` — Rust privileged system D-Bus service, Polkit-gated writes.
-- `powerdeck-agent-native` — Rust user-session Battery Saver agent with ownership-aware restore.
-- `qt/` — C++20 Qt6 Widgets + QtDBus unprivileged GUI.
+Python is not a runtime, build, test, packaging, or launcher dependency.
 
-The system daemon keeps the existing `org.powerdeck.System1` service, object path,
-method signatures and JSON payload shape so old clients remain usable during the
-migration. The native user agent adds `org.powerdeck.Agent1` for the Qt GUI.
-
-The supplied systemd files are drop-ins. They do not delete the Python units;
-removing the drop-ins restores the old runtime.
-
-## Development build/install shortcuts
-
-After all quality gates pass:
+## Quality gate
 
 ```fish
-./scripts/build-release.sh
-./scripts/dev-install.sh
+cd ~/Projects/PowerDeck
+./native/scripts/native-check.sh
 ```
 
-The development installer keeps the original Python service units as rollback
-fallbacks and only installs systemd drop-ins. To revert:
+## Build
 
 ```fish
-./scripts/dev-rollback.sh
+./native/scripts/build-release.sh
 ```
 
-For public distribution, the target packaging path is an Arch/CachyOS package
-plus prebuilt GitHub Release artifacts so end users do not need a Python venv or
-a local Rust/Qt build toolchain.
+Outputs:
+
+- `native/target/release/powerdeckd-native`
+- `native/target/release/powerdeck-agent-native`
+- `native/target/release/powerdeckctl-native`
+- `native/qt/build/powerdeck-native`
+
+## Development install
+
+```fish
+./native/scripts/dev-install.sh
+```
+
+The installer places canonical native units and binaries directly. It does not
+rely on Python service units or systemd drop-ins.
+
+## CLI
+
+```fish
+powerdeckctl status
+powerdeckctl status --json
+powerdeckctl telemetry --json
+powerdeckctl thermal get --json
+powerdeckctl saver state --json
+```
+
+Write operations continue to use the stable system D-Bus interface and Polkit.

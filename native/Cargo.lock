@@ -333,6 +333,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "powerdeckctl-native"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
 name = "powerdeckd-native"
 version = "0.1.0"
 dependencies = [

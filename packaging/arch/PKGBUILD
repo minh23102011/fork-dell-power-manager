@@ -1,0 +1,83 @@
+pkgname=powerdeck
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='Native Dell laptop power management for Linux'
+arch=('x86_64')
+url='https://github.com/minh23102011/powerdeck'
+license=('MIT')
+depends=('qt6-base' 'polkit' 'systemd-libs')
+optdepends=(
+  'brightnessctl: Battery Saver brightness control'
+  'power-profiles-daemon: OS power-profile control'
+  'wireplumber: wpctl audio mute support'
+  'niri: internal-display refresh-rate control on Niri'
+)
+makedepends=('rust' 'cmake' 'ninja' 'gcc' 'pkgconf')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  cargo build \
+    --manifest-path native/Cargo.toml \
+    --release \
+    --workspace \
+    --locked
+
+  cmake \
+    -S native/qt \
+    -B native/qt/build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release
+  cmake --build native/qt/build --parallel
+}
+
+check() {
+  cd "$srcdir/$pkgname-$pkgver"
+  cargo test --manifest-path native/Cargo.toml --workspace --locked
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -Dm755 \
+    native/target/release/powerdeckd-native \
+    "$pkgdir/usr/lib/powerdeck/powerdeckd"
+  install -Dm755 \
+    native/target/release/powerdeck-agent-native \
+    "$pkgdir/usr/lib/powerdeck/powerdeck-agent"
+  install -Dm755 \
+    native/target/release/powerdeckctl-native \
+    "$pkgdir/usr/bin/powerdeckctl"
+  install -Dm755 \
+    native/qt/build/powerdeck-native \
+    "$pkgdir/usr/bin/powerdeck"
+
+  ln -s powerdeckctl "$pkgdir/usr/bin/powerdeck-daemonctl"
+  ln -s powerdeckctl "$pkgdir/usr/bin/powerdeck-thermalctl"
+  ln -s powerdeckctl "$pkgdir/usr/bin/powerdeck-agentctl"
+
+  install -Dm644 \
+    data/systemd/powerdeckd.service \
+    "$pkgdir/usr/lib/systemd/system/powerdeckd.service"
+  install -Dm644 \
+    data/systemd/user/powerdeck-agent.service \
+    "$pkgdir/usr/lib/systemd/user/powerdeck-agent.service"
+  install -Dm644 \
+    data/dbus-1/system.d/org.powerdeck.System1.conf \
+    "$pkgdir/usr/share/dbus-1/system.d/org.powerdeck.System1.conf"
+  install -Dm644 \
+    data/dbus-1/system-services/org.powerdeck.System1.service \
+    "$pkgdir/usr/share/dbus-1/system-services/org.powerdeck.System1.service"
+  install -Dm644 \
+    data/dbus-1/services/org.powerdeck.Agent1.service \
+    "$pkgdir/usr/share/dbus-1/services/org.powerdeck.Agent1.service"
+  install -Dm644 \
+    data/polkit-1/actions/org.powerdeck.system.policy \
+    "$pkgdir/usr/share/polkit-1/actions/org.powerdeck.system.policy"
+  install -Dm644 \
+    data/applications/org.powerdeck.PowerDeck.desktop \
+    "$pkgdir/usr/share/applications/org.powerdeck.PowerDeck.desktop"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

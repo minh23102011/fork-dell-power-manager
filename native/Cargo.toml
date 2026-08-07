@@ -4,6 +4,7 @@ members = [
   "crates/powerdeck-telemetry",
   "crates/powerdeckd",
   "crates/powerdeck-agent",
+  "crates/powerdeckctl",
 ]
 resolver = "2"
 
