@@ -31,6 +31,9 @@ _INTROSPECTION_XML = f"""\
     <method name="Ping">
       <arg name="reply" type="s" direction="out"/>
     </method>
+    <method name="GetTelemetryState">
+      <arg name="state_json" type="s" direction="out"/>
+    </method>
     <method name="GetThermalState">
       <arg name="state_json" type="s" direction="out"/>
     </method>
@@ -145,6 +148,12 @@ class SystemService:
 
         if member == "Ping" and not message.signature:
             return Message.new_method_return(message, "s", ["pong"])
+        if member == "GetTelemetryState" and not message.signature:
+            return Message.new_method_return(
+                message,
+                "s",
+                [await self.api.get_telemetry_state()],
+            )
         if member == "GetThermalState" and not message.signature:
             return Message.new_method_return(
                 message,

@@ -74,6 +74,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             self.busy = False
             self.widgets: dict[str, Any] = {}
             self._css_provider: Any = None
+            self._telemetry_labels: dict[str, Any] = {}
+            self._telemetry_started = False
+            self._latest_telemetry: dict[str, Any] = {}
 
         def do_activate(self) -> None:
             if self.window is None:
@@ -568,6 +571,83 @@ def main(argv: Sequence[str] | None = None) -> int:
             page.append(note)
             return self._scrolled_page(page)
 
+
+        @staticmethod
+        def _format_watts(value: object) -> str:
+            if not isinstance(value, int | float):
+                return "Unavailable"
+            return f"{float(value):.2f} W"
+
+        @staticmethod
+        def _format_rpm(value: object) -> str:
+            if not isinstance(value, int):
+                return "Firmware managed"
+            return f"{value} RPM"
+
+        def _apply_telemetry(
+            self,
+            sample: dict[str, Any],
+        ) -> bool:
+            self._latest_telemetry = sample
+
+            cpu = self._telemetry_labels.get("cpu")
+            gpu = self._telemetry_labels.get("gpu")
+            fan = self._telemetry_labels.get("fan")
+
+            if cpu is not None:
+                cpu.set_text(
+                    self._format_watts(sample.get("cpu_watts"))
+                )
+            if gpu is not None:
+                gpu.set_text(
+                    self._format_watts(sample.get("gpu_watts"))
+                )
+            if fan is not None:
+                fan.set_text(
+                    self._format_rpm(sample.get("fan_rpm"))
+                )
+            return False
+
+        def _telemetry_unavailable(self) -> bool:
+            self._apply_telemetry({})
+            return False
+
+        def _start_telemetry(self) -> None:
+            if self._telemetry_started:
+                if self._latest_telemetry:
+                    self._apply_telemetry(self._latest_telemetry)
+                return
+
+            self._telemetry_started = True
+
+            def worker() -> None:
+                asyncio.run(self._telemetry_loop())
+
+            threading.Thread(
+                target=worker,
+                name="powerdeck-telemetry",
+                daemon=True,
+            ).start()
+
+        async def _telemetry_loop(self) -> None:
+            while True:
+                client: SystemClient | None = None
+                try:
+                    client = await SystemClient.connect()
+                    while True:
+                        sample = await client.get_telemetry_state()
+                        GLib.idle_add(
+                            self._apply_telemetry,
+                            sample,
+                        )
+                        await asyncio.sleep(1.5)
+                except Exception:
+                    GLib.idle_add(self._telemetry_unavailable)
+                    await asyncio.sleep(2.0)
+                finally:
+                    if client is not None:
+                        client.disconnect()
+
         def _thermal_page(
             self,
             snapshot: DiscoverySnapshot,
@@ -578,8 +658,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             page = self._page(
                 "Thermal",
                 (
-                    "Apply a kernel platform profile "
-                    "through powerdeckd."
+                    "Live power and cooling telemetry, plus "
+                    "firmware-managed cooling profiles."
                 ),
             )
 
@@ -595,6 +675,57 @@ def main(argv: Sequence[str] | None = None) -> int:
             governor_value = (
                 capabilities.cpu.current_governor
                 or "Unknown"
+            )
+
+            cpu_power = self._value_suffix("Sampling...")
+            gpu_power = self._value_suffix("Sampling...")
+            fan_speed = self._value_suffix("Sampling...")
+            self._telemetry_labels = {
+                "cpu": cpu_power,
+                "gpu": gpu_power,
+                "fan": fan_speed,
+            }
+            if self._latest_telemetry:
+                self._apply_telemetry(
+                    self._latest_telemetry
+                )
+
+            telemetry_card = self._card(
+                (
+                    self._row(
+                        "CPU package power",
+                        subtitle=(
+                            "Intel RAPL package power when "
+                            "the kernel exposes an energy counter."
+                        ),
+                        suffix=cpu_power,
+                        tall=True,
+                    ),
+                    self._row(
+                        "GPU power",
+                        subtitle=(
+                            "Uses a dedicated DRM hwmon power "
+                            "or energy counter when available."
+                        ),
+                        suffix=gpu_power,
+                        tall=True,
+                    ),
+                    self._row(
+                        "Fan speed",
+                        subtitle=(
+                            "Read-only RPM from Linux hwmon. "
+                            "Firmware remains in direct control."
+                        ),
+                        suffix=fan_speed,
+                        tall=True,
+                    ),
+                )
+            )
+            page.append(
+                self._section(
+                    "Live telemetry",
+                    telemetry_card,
+                )
             )
 
             current_card = self._card(
@@ -661,21 +792,47 @@ def main(argv: Sequence[str] | None = None) -> int:
             profile_card = self._card(
                 (
                     self._row(
-                        "Thermal mode",
+                        "Cooling profile",
                         subtitle=(
-                            "Choose the laptop thermal "
-                            "management profile."
+                            "Cool requests stronger firmware "
+                            "cooling; Quiet prioritizes low noise."
                         ),
                         suffix=controls,
+                        tall=True,
                     ),
                 )
             )
             page.append(
                 self._section(
-                    "Profile",
+                    "Cooling",
                     profile_card,
                 )
             )
+
+            note = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL,
+                spacing=10,
+            )
+            note.add_css_class("powerdeck-quiet-box")
+            note.append(
+                self._icon(
+                    "dialog-information-symbolic",
+                    16,
+                )
+            )
+            note.append(
+                self._label(
+                    (
+                        "PowerDeck does not override raw fan PWM. "
+                        "The verified platform profile tells Dell "
+                        "firmware how aggressively to cool while "
+                        "firmware keeps thermal safeguards."
+                    ),
+                    "powerdeck-quiet-text",
+                    wrap=True,
+                )
+            )
+            page.append(note)
             return self._scrolled_page(page)
 
         def _switch(
@@ -1366,6 +1523,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             overlay.set_child(toolbar)
             self.overlay = overlay
             self._set_content(overlay)
+            self._start_telemetry()
             return False
 
     app = PowerDeckApplication()

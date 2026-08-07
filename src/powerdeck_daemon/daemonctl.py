@@ -17,6 +17,8 @@ from powerdeck_daemon.client import SystemClient
 class Client(Protocol):
     async def ping(self) -> str: ...
 
+    async def get_telemetry_state(self) -> dict[str, Any]: ...
+
     async def get_thermal_state(self) -> dict[str, Any]: ...
 
     async def set_thermal_profile(
@@ -39,6 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("ping")
 
+    telemetry = subparsers.add_parser("telemetry")
+    telemetry.add_argument("--json", action="store_true")
+
     thermal = subparsers.add_parser("thermal")
     thermal_subparsers = thermal.add_subparsers(
         dest="thermal_command",
@@ -55,6 +60,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     set_parser.add_argument("--json", action="store_true")
     return parser
+
+
+def _print_result(
+    result: dict[str, Any],
+    *,
+    as_json: bool,
+    stdout: TextIO,
+) -> None:
+    if as_json:
+        print(
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+            file=stdout,
+        )
+        return
+
+    for key, value in result.items():
+        print(
+            f"{key.replace('_', ' ').title()}: {value}",
+            file=stdout,
+        )
 
 
 async def run_async(
@@ -74,6 +104,15 @@ async def run_async(
             print(await active_client.ping(), file=stdout)
             return 0
 
+        if args.command == "telemetry":
+            result = await active_client.get_telemetry_state()
+            _print_result(
+                result,
+                as_json=bool(args.json),
+                stdout=stdout,
+            )
+            return 0
+
         if args.thermal_command == "get":
             result = await active_client.get_thermal_state()
         else:
@@ -81,22 +120,11 @@ async def run_async(
                 str(args.profile)
             )
 
-        if args.json:
-            print(
-                json.dumps(
-                    result,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ),
-                file=stdout,
-            )
-        else:
-            for key, value in result.items():
-                print(
-                    f"{key.replace('_', ' ').title()}: {value}",
-                    file=stdout,
-                )
+        _print_result(
+            result,
+            as_json=bool(args.json),
+            stdout=stdout,
+        )
         return 0
     except PowerDeckError as error:
         print(

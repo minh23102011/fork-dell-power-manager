@@ -68,6 +68,9 @@ class SystemClient:
     async def ping(self) -> str:
         return await self._call("Ping")
 
+    async def get_telemetry_state(self) -> dict[str, Any]:
+        return _decode_json(await self._call("GetTelemetryState"))
+
     async def get_thermal_state(self) -> dict[str, Any]:
         return _decode_json(await self._call("GetThermalState"))
 

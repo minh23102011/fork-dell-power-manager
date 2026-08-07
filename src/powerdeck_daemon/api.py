@@ -15,6 +15,7 @@ from powerdeck_backends.system.intel_pstate_control import (
     CpuPolicyStatus,
     IntelPstateController,
 )
+from powerdeck_backends.telemetry import PowerTelemetrySample, PowerTelemetrySampler
 from powerdeck_backends.thermal.controller import (
     PlatformProfileController,
     ThermalControlStatus,
@@ -70,6 +71,10 @@ class CpuController(Protocol):
     ) -> CpuPolicyApplyResult: ...
 
 
+class TelemetryReader(Protocol):
+    def sample(self) -> PowerTelemetrySample: ...
+
+
 class SystemApi:
     def __init__(
         self,
@@ -78,6 +83,7 @@ class SystemApi:
         thermal_controller: ThermalController | None = None,
         charge_controller: ChargeController | None = None,
         cpu_controller: CpuController | None = None,
+        telemetry_reader: TelemetryReader | None = None,
         authorizer: Authorizer,
     ) -> None:
         selected_thermal = thermal_controller or controller
@@ -95,6 +101,11 @@ class SystemApi:
             cpu_controller
             if cpu_controller is not None
             else IntelPstateController()
+        )
+        self.telemetry_reader: TelemetryReader = (
+            telemetry_reader
+            if telemetry_reader is not None
+            else PowerTelemetrySampler()
         )
         self.authorizer = authorizer
 
@@ -122,10 +133,12 @@ class SystemApi:
                 details={"operation": operation, **details},
             )
 
+    async def get_telemetry_state(self) -> str:
+        state = await asyncio.to_thread(self.telemetry_reader.sample)
+        return state.to_json(indent=None)
+
     async def get_thermal_state(self) -> str:
-        state = await asyncio.to_thread(
-            self.thermal_controller.read_status
-        )
+        state = await asyncio.to_thread(self.thermal_controller.read_status)
         return state.to_json(indent=None)
 
     async def set_thermal_profile(
@@ -145,9 +158,7 @@ class SystemApi:
         return result.to_json(indent=None)
 
     async def get_charge_state(self) -> str:
-        state = await asyncio.to_thread(
-            self.charge_controller.read_status
-        )
+        state = await asyncio.to_thread(self.charge_controller.read_status)
         return state.to_json(indent=None)
 
     async def set_charge_mode(
@@ -188,9 +199,7 @@ class SystemApi:
         return result.to_json(indent=None)
 
     async def get_cpu_state(self) -> str:
-        state = await asyncio.to_thread(
-            self.cpu_controller.read_status
-        )
+        state = await asyncio.to_thread(self.cpu_controller.read_status)
         return state.to_json(indent=None)
 
     async def set_cpu_policy(
@@ -204,9 +213,7 @@ class SystemApi:
             "set-cpu-policy",
             {
                 "disable_turbo": str(disable_turbo).lower(),
-                "max_performance_percent": str(
-                    max_performance_percent
-                ),
+                "max_performance_percent": str(max_performance_percent),
             },
         )
         result = await asyncio.to_thread(
@@ -222,5 +229,6 @@ __all__ = [
     "ChargeController",
     "CpuController",
     "SystemApi",
+    "TelemetryReader",
     "ThermalController",
 ]
