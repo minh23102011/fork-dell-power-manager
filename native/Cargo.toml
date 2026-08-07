@@ -1,11 +1,23 @@
 [workspace]
-members = ["crates/powerdeck-core"]
+members = [
+  "crates/powerdeck-core",
+  "crates/powerdeck-telemetry",
+  "crates/powerdeckd",
+  "crates/powerdeck-agent",
+]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
+
+[workspace.dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "process", "rt", "sync", "time"] }
+zbus = { version = "5.18", default-features = false, features = ["tokio"] }
 
 [profile.release]
 opt-level = 3

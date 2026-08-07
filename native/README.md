@@ -1,38 +1,39 @@
-# PowerDeck native rewrite — Phase 1
+# PowerDeck native runtime candidate
 
-This directory is the first native migration slice. It does not replace the
-currently installed Python services yet.
+This tree completes the native migration candidate while preserving the existing
+PowerDeck D-Bus privilege boundary and rollback behavior.
 
-## Scope
+## Components
 
-- Rust workspace with no third-party runtime dependencies.
-- Native thermal platform-profile controller.
-- Native Intel P-state controller.
-- Native battery charge-mode and custom-threshold controller.
-- Validation, read-back verification, and rollback semantics preserved from the
-  current Python implementation.
-- Fake-sysfs unit tests live next to each controller.
+- `powerdeck-core-native` — Rust transactional battery, thermal and Intel P-state control.
+- `powerdeck-telemetry-native` — Rust telemetry with a tiny C `perf_event_open(2)` ABI helper.
+- `powerdeckd-native` — Rust privileged system D-Bus service, Polkit-gated writes.
+- `powerdeck-agent-native` — Rust user-session Battery Saver agent with ownership-aware restore.
+- `qt/` — C++20 Qt6 Widgets + QtDBus unprivileged GUI.
 
-## Deliberately not switched yet
+The system daemon keeps the existing `org.powerdeck.System1` service, object path,
+method signatures and JSON payload shape so old clients remain usable during the
+migration. The native user agent adds `org.powerdeck.Agent1` for the Qt GUI.
 
-- `powerdeckd` D-Bus ownership stays on the Python implementation.
-- Polkit integration stays on the Python implementation.
-- Telemetry stays on the Python implementation.
-- GTK UI and user agent stay unchanged.
+The supplied systemd files are drop-ins. They do not delete the Python units;
+removing the drop-ins restores the old runtime.
 
-Phase 2 will connect the Rust service to the stable `org.powerdeck.System1`
-D-Bus contract, migrate the session agent, add the C++20/Qt6 GUI, then remove
-the Python runtime only after parity tests pass.
+## Development build/install shortcuts
 
-## Native quality gate
+After all quality gates pass:
 
 ```fish
-cd ~/Projects/PowerDeck/native
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo build --release --workspace
+./scripts/build-release.sh
+./scripts/dev-install.sh
 ```
 
-The release profile uses LTO, one codegen unit, abort-on-panic, and symbol
-stripping to favor a small optimized binary once executables are added.
+The development installer keeps the original Python service units as rollback
+fallbacks and only installs systemd drop-ins. To revert:
+
+```fish
+./scripts/dev-rollback.sh
+```
+
+For public distribution, the target packaging path is an Arch/CachyOS package
+plus prebuilt GitHub Release artifacts so end users do not need a Python venv or
+a local Rust/Qt build toolchain.

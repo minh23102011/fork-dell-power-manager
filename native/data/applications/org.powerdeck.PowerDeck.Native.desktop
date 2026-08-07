@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PowerDeck Native
+Comment=Battery, thermal, and Battery Saver controls
+Exec=/usr/local/bin/powerdeck-native
+Icon=battery-good-symbolic
+Terminal=false
+Categories=Settings;System;
+StartupNotify=true
