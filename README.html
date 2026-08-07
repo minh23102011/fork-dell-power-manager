@@ -4,10 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta
-    name="description"
-    content="PowerDeck 2.x — native Dell laptop power management for Linux."
-  >
+  <meta name="description" content="PowerDeck 2.x — native Dell laptop power management for Linux.">
   <title>PowerDeck — Native Linux power control</title>
   <link rel="stylesheet" href="README.css">
   <script src="README.js" defer></script>
@@ -17,205 +14,146 @@
     <div class="header-inner">
       <a class="brand" href="#top" aria-label="PowerDeck home">
         <span class="brand-mark">PD</span>
-        <span>
+        <span class="brand-copy">
           <strong>PowerDeck</strong>
           <small>Native power control</small>
         </span>
       </a>
 
       <nav class="site-nav" aria-label="Project sections">
+        <a href="#overview">Overview</a>
         <a href="#features">Features</a>
-        <a href="#architecture">Architecture</a>
         <a href="#demo">Demo</a>
         <a href="#build">Build</a>
       </nav>
 
-      <a
-        class="repo-link"
-        href="https://github.com/minh23102011/powerdeck"
-      >GitHub</a>
+      <a class="repo-link" href="https://github.com/minh23102011/powerdeck">GitHub</a>
     </div>
   </header>
 
   <main id="top">
-    <section class="hero section-shell">
+    <section class="hero section-shell" id="overview">
       <div class="hero-copy">
-        <p class="eyebrow">POWERDECK 2.x · NATIVE STACK</p>
-        <h1>Dell laptop power control for Linux.</h1>
+        <p class="eyebrow">POWERDECK 2.x</p>
+        <h1>Native Dell laptop power management for Linux.</h1>
         <p class="hero-lead">
-          Rust system services, a C++20 / Qt6 desktop UI, native telemetry,
-          verified writes and a strict privilege boundary.
+          PowerDeck keeps the hot path native: Rust services for system logic,
+          a C++20 / Qt6 GUI for the desktop, and small verified interfaces to
+          Linux power and thermal controls.
         </p>
-
         <div class="hero-actions">
-          <a class="button primary" href="#demo">Explore the UI</a>
-          <a class="button" href="#build">Build on CachyOS</a>
-        </div>
-
-        <div class="tech-row" aria-label="Technology stack">
-          <span>Rust</span>
-          <span>C++20 + Qt6</span>
-          <span>tiny C perf helper</span>
-          <span>D-Bus + Polkit</span>
-          <span>MIT</span>
+          <a class="button primary" href="#demo">Open the demo</a>
+          <a class="button" href="#build">Build from source</a>
         </div>
       </div>
 
-      <div class="hero-status" aria-label="Current project status">
-        <div>
-          <span class="status-label">Runtime</span>
-          <strong>Native-only</strong>
-        </div>
-        <div>
-          <span class="status-label">GUI</span>
-          <strong>Qt6 Widgets</strong>
-        </div>
-        <div>
-          <span class="status-label">Privileged core</span>
-          <strong>Rust</strong>
-        </div>
-        <div>
-          <span class="status-label">Python</span>
-          <strong>Not used</strong>
-        </div>
-      </div>
+      <aside class="hero-meta" aria-label="Project summary">
+        <dl>
+          <div><dt>Runtime</dt><dd>Native-only</dd></div>
+          <div><dt>GUI</dt><dd>Qt6 Widgets</dd></div>
+          <div><dt>Core</dt><dd>Rust</dd></div>
+          <div><dt>Python</dt><dd>Not used</dd></div>
+        </dl>
+      </aside>
     </section>
 
     <section class="section-shell screenshot-section">
-      <div class="section-heading">
+      <div class="section-heading compact">
         <div>
           <p class="eyebrow">CURRENT UI</p>
-          <h2>Native Qt candidate</h2>
+          <h2>Current Qt interface</h2>
         </div>
         <p>
-          Capability-gated battery controls, firmware profiles and a native
-          Battery Saver agent.
+          The real app keeps the GUI unprivileged and forwards privileged writes
+          through the native system service.
         </p>
       </div>
 
       <figure class="product-shot">
-        <img
-          src="docs/assets/powerdeck-native-ui.png"
-          alt="PowerDeck native Qt Battery page"
-        >
-        <figcaption>
-          Battery page on the current Dell test machine. The GUI stays
-          unprivileged and writes through the native system service.
-        </figcaption>
+        <img src="docs/assets/powerdeck-native-ui.png" alt="PowerDeck native Qt Battery page">
+        <figcaption>Battery page on the current Dell test machine.</figcaption>
       </figure>
     </section>
 
     <section class="section-shell" id="features">
-      <div class="section-heading">
+      <div class="section-heading compact">
         <div>
           <p class="eyebrow">FEATURES</p>
-          <h2>Focused controls, not a generic dashboard.</h2>
+          <h2>Focused controls.</h2>
         </div>
         <p>
-          PowerDeck exposes a control only when the native daemon can discover,
-          validate and verify the corresponding kernel interface.
+          PowerDeck exposes a control only when the daemon can discover,
+          validate and verify the matching kernel or firmware interface.
         </p>
       </div>
 
       <div class="feature-grid">
         <article class="feature-card">
-          <span class="feature-index">01</span>
           <h3>Battery</h3>
-          <p>
-            Firmware charging modes, custom thresholds, active-mode discovery,
-            read-back verification and rollback.
-          </p>
+          <p>Dell charging modes, custom thresholds and verified writes with rollback.</p>
           <ul>
             <li>Express / Standard / Adaptive / Custom</li>
-            <li>50–95% start threshold</li>
-            <li>55–100% stop threshold</li>
+            <li>Validated start and stop thresholds</li>
+            <li>Capability-gated by sysfs discovery</li>
           </ul>
         </article>
 
         <article class="feature-card">
-          <span class="feature-index">02</span>
           <h3>Thermal</h3>
-          <p>
-            Kernel platform profiles plus low-overhead CPU, GPU and fan
-            telemetry.
-          </p>
+          <p>Firmware cooling profiles, CPU package power, GPU power and fan RPM.</p>
           <ul>
             <li>Cool / Quiet / Balanced / Performance</li>
-            <li>Intel RAPL and Linux perf fallback</li>
-            <li>Read-only hwmon fan RPM</li>
+            <li>Read-only fan telemetry</li>
+            <li>No raw PWM writes</li>
           </ul>
         </article>
 
         <article class="feature-card">
-          <span class="feature-index">03</span>
           <h3>Battery Saver</h3>
-          <p>
-            A user-level native policy that coordinates display, CPU and device
-            savings without keeping the GUI open.
-          </p>
+          <p>A native user-level policy that coordinates display, CPU and device savings.</p>
           <ul>
-            <li>Brightness + refresh rate</li>
-            <li>Power + thermal profiles</li>
-            <li>Turbo, P-state, keyboard and audio</li>
+            <li>Brightness and refresh rate</li>
+            <li>OS + firmware profile coordination</li>
+            <li>CPU, keyboard and audio options</li>
           </ul>
         </article>
       </div>
     </section>
 
-    <section class="section-shell" id="architecture">
-      <div class="section-heading">
+    <section class="section-shell architecture-block">
+      <div class="section-heading compact">
         <div>
           <p class="eyebrow">ARCHITECTURE</p>
           <h2>Privilege stays behind D-Bus.</h2>
         </div>
-        <p>
-          The GUI never runs as root. System writes are authorized with Polkit,
-          validated by Rust and verified against hardware state.
-        </p>
+        <p>The GUI never runs as root. System writes go through Polkit, validation and hardware read-back.</p>
       </div>
 
-      <div class="architecture-grid">
-        <article>
-          <span class="node-tag">DESKTOP</span>
-          <h3>powerdeck</h3>
-          <strong>C++20 · Qt6 Widgets · QtDBus</strong>
-          <p>Presentation and user interaction only.</p>
-        </article>
-
-        <div class="arch-link" aria-hidden="true">D-Bus</div>
-
-        <article>
-          <span class="node-tag">ROOT</span>
-          <h3>powerdeckd</h3>
-          <strong>Rust · Polkit · sysfs</strong>
-          <p>Battery, thermal, CPU and telemetry.</p>
-        </article>
-
-        <article>
-          <span class="node-tag">USER</span>
-          <h3>powerdeck-agent</h3>
-          <strong>Rust · session D-Bus</strong>
-          <p>AC transitions and Battery Saver ownership.</p>
-        </article>
-      </div>
-
-      <div class="api-strip">
-        <code>org.powerdeck.System1</code>
-        <span></span>
-        <code>org.powerdeck.Agent1</code>
-      </div>
+      <pre class="arch-diagram"><code>C++20 / Qt6 GUI
+      |
+      |  D-Bus
+      |
+      +-------------------------------+
+      |                               |
+      v                               v
+Rust user agent                Rust system daemon
+powerdeck-agent                powerdeckd
+      |                               |
+      |                               +-- charge control
+      |                               +-- thermal profile
+      |                               +-- CPU policy
+      |                               +-- telemetry
+      |
+      +-- Battery Saver automation</code></pre>
     </section>
 
     <section class="section-shell" id="demo">
-      <div class="section-heading">
+      <div class="section-heading compact">
         <div>
-          <p class="eyebrow">BROWSER DEMO</p>
-          <h2>Current Qt layout, simulated.</h2>
+          <p class="eyebrow">WEB DEMO</p>
+          <h2>Simple browser simulation.</h2>
         </div>
-        <p>
-          This demo is browser-only. It never contacts D-Bus or changes
-          hardware.
-        </p>
+        <p>This is a lightweight preview of the current layout. It does not talk to D-Bus or real hardware.</p>
       </div>
 
       <div class="demo-frame">
@@ -229,26 +167,9 @@
           </div>
 
           <div class="demo-tabs" role="tablist" aria-label="PowerDeck demo pages">
-            <button
-              class="demo-tab active"
-              type="button"
-              data-panel="demo-battery"
-            >Battery</button>
-            <button
-              class="demo-tab"
-              type="button"
-              data-panel="demo-thermal"
-            >Thermal</button>
-            <button
-              class="demo-tab"
-              type="button"
-              data-panel="demo-saver"
-            >Battery Saver</button>
-          </div>
-
-          <div class="demo-actions">
-            <span class="connected-pill">Connected</span>
-            <button id="demo-refresh" type="button">Refresh</button>
+            <button class="demo-tab active" type="button" data-panel="demo-battery">Battery</button>
+            <button class="demo-tab" type="button" data-panel="demo-thermal">Thermal</button>
+            <button class="demo-tab" type="button" data-panel="demo-saver">Battery Saver</button>
           </div>
         </div>
 
@@ -258,43 +179,16 @@
               <h3>Battery</h3>
               <p>Firmware charging policy and native capability status.</p>
             </div>
-
             <div class="stat-strip">
-              <div>
-                <small>Battery interface</small>
-                <strong>BAT0</strong>
-                <span>Kernel charge-control device.</span>
-              </div>
-              <div>
-                <small>Firmware mode</small>
-                <strong id="demo-current-charge">custom</strong>
-                <span>Current firmware charging policy.</span>
-              </div>
-              <div>
-                <small>Thresholds</small>
-                <strong id="demo-current-thresholds">50–55 %</strong>
-                <span>Custom start and stop window.</span>
-              </div>
+              <div><small>Battery interface</small><strong>BAT0</strong><span>Kernel charge-control device.</span></div>
+              <div><small>Firmware mode</small><strong id="demo-current-charge">custom</strong><span>Current firmware charging policy.</span></div>
+              <div><small>Thresholds</small><strong id="demo-current-thresholds">50–55 %</strong><span>Custom start and stop window.</span></div>
             </div>
-
-            <h4 class="demo-section-title">Charge control</h4>
             <div class="settings-surface">
-              <div class="setting-row">
-                <div>
-                  <strong>Dell firmware interface</strong>
-                  <small>
-                    Only controls verified by the native daemon are exposed.
-                  </small>
-                </div>
-                <span class="availability-pill">Available</span>
-              </div>
-
               <div class="setting-row stacked-mobile">
                 <div>
                   <strong>Charging mode</strong>
-                  <small>
-                    Choose the firmware policy used while AC is connected.
-                  </small>
+                  <small>Choose the firmware charging policy.</small>
                   <p class="mode-note" id="charge-mode-note"></p>
                 </div>
                 <div class="setting-controls">
@@ -304,80 +198,41 @@
                     <option value="adaptive">adaptive</option>
                     <option value="custom" selected>custom</option>
                   </select>
-                  <button id="demo-apply-charge" type="button">Apply mode</button>
+                  <button id="demo-apply-charge" type="button">Apply</button>
                 </div>
               </div>
-
               <div class="setting-row stacked-mobile">
                 <div>
                   <strong>Custom thresholds</strong>
-                  <small>
-                    Start charging below the first value and stop at the second.
-                  </small>
+                  <small>Start charging below the first value and stop at the second.</small>
                 </div>
                 <div class="setting-controls threshold-controls">
-                  <input
-                    id="demo-start"
-                    type="number"
-                    min="50"
-                    max="95"
-                    value="50"
-                    aria-label="Start threshold"
-                  >
+                  <input id="demo-start" type="number" min="50" max="95" value="50" aria-label="Start threshold">
                   <span>→</span>
-                  <input
-                    id="demo-end"
-                    type="number"
-                    min="55"
-                    max="100"
-                    value="55"
-                    aria-label="End threshold"
-                  >
-                  <button id="demo-apply-thresholds" type="button">
-                    Apply thresholds
-                  </button>
+                  <input id="demo-end" type="number" min="55" max="100" value="55" aria-label="End threshold">
+                  <button id="demo-apply-thresholds" type="button">Apply</button>
                 </div>
               </div>
-
-              <div class="inline-note">
-                Writes are verified after every change. A mismatched write is
-                rolled back by the native daemon.
-              </div>
+              <div class="inline-note">Writes are verified after each change. This demo only simulates the flow.</div>
             </div>
           </section>
 
           <section class="demo-panel" id="demo-thermal">
             <div class="demo-page-heading">
               <h3>Thermal</h3>
-              <p>Live package power, GPU activity and firmware-managed cooling.</p>
+              <p>Live power telemetry and firmware-managed cooling.</p>
             </div>
-
             <div class="stat-strip">
-              <div>
-                <small>CPU package</small>
-                <strong>4.20 W</strong>
-                <span>Intel RAPL package power.</span>
-              </div>
-              <div>
-                <small>GPU</small>
-                <strong>0.07 W</strong>
-                <span>DRM hwmon or Linux perf energy.</span>
-              </div>
-              <div>
-                <small>Fan</small>
-                <strong>3582 RPM</strong>
-                <span>Read-only RPM from hwmon.</span>
-              </div>
+              <div><small>CPU package</small><strong>4.20 W</strong><span>Intel RAPL package power.</span></div>
+              <div><small>GPU</small><strong>0.07 W</strong><span>DRM hwmon or Linux perf energy.</span></div>
+              <div><small>Fan</small><strong>3582 RPM</strong><span>Read-only RPM from hwmon.</span></div>
             </div>
-
-            <h4 class="demo-section-title">Cooling profile</h4>
             <div class="settings-surface thermal-surface">
               <div class="thermal-current">
                 <small>Current profile</small>
                 <strong id="demo-current-thermal">balanced</strong>
                 <span>Source: kernel-platform-profile-class</span>
               </div>
-
               <div>
                 <small class="field-label">Requested profile</small>
                 <div class="setting-controls wide">
@@ -387,17 +242,10 @@
                     <option selected>balanced</option>
                     <option>performance</option>
                   </select>
-                  <button id="demo-apply-thermal" type="button">
-                    Apply profile
-                  </button>
+                  <button id="demo-apply-thermal" type="button">Apply</button>
                 </div>
                 <p class="mode-note" id="thermal-mode-note"></p>
               </div>
-            </div>
-
-            <div class="inline-note standalone">
-              PowerDeck changes only kernel-advertised platform profiles. It
-              never writes raw fan PWM.
             </div>
           </section>
 
@@ -406,116 +254,46 @@
               <h3>Battery Saver</h3>
               <p>A native policy that coordinates display, CPU and device savings.</p>
             </div>
-
-            <div class="saver-master settings-surface">
-              <div>
-                <strong>Battery Saver runtime</strong>
-                <small>
-                  Enable it now, or let the native user agent react to AC power.
-                </small>
+            <div class="settings-surface saver-grid-simple">
+              <div class="mini-setting"><span>Brightness cap</span><strong>40%</strong></div>
+              <div class="mini-setting"><span>Target refresh rate</span><strong>60 Hz</strong></div>
+              <div class="mini-setting"><span>OS power profile</span><strong>power-saver</strong></div>
+              <div class="mini-setting vertical">
+                <span>Thermal profile</span>
+                <select id="demo-saver-thermal">
+                  <option selected>quiet</option>
+                  <option>cool</option>
+                  <option>balanced</option>
+                  <option>performance</option>
+                </select>
+                <small id="saver-thermal-note"></small>
               </div>
-              <span class="availability-pill">Inactive · AC online</span>
-              <label class="switch-label">
-                <input class="switch" type="checkbox" id="demo-saver-switch">
-                <span>Enable</span>
-              </label>
-            </div>
-
-            <h4 class="demo-section-title">Policy</h4>
-            <div class="saver-grid">
-              <article class="settings-surface saver-card">
-                <h5>Display</h5>
-                <div class="mini-setting">
-                  <span>Brightness cap</span>
-                  <strong>40%</strong>
-                </div>
-                <div class="mini-setting">
-                  <span>Only lower brightness</span>
-                  <input class="switch" type="checkbox" checked>
-                </div>
-                <div class="mini-setting">
-                  <span>Target refresh rate</span>
-                  <strong>60 Hz</strong>
-                </div>
-              </article>
-
-              <article class="settings-surface saver-card">
-                <h5>Performance</h5>
-                <div class="mini-setting">
-                  <span>OS power profile</span>
-                  <strong>power-saver</strong>
-                </div>
-                <div class="mini-setting vertical">
-                  <span>Thermal profile</span>
-                  <select id="demo-saver-thermal">
-                    <option selected>quiet</option>
-                    <option>cool</option>
-                    <option>balanced</option>
-                    <option>performance</option>
-                  </select>
-                  <small id="saver-thermal-note"></small>
-                </div>
-                <div class="mini-setting">
-                  <span>Maximum CPU performance</span>
-                  <strong>60%</strong>
-                </div>
-              </article>
             </div>
           </section>
         </div>
       </div>
 
-      <div class="demo-log">
-        <strong>Simulation</strong>
-        <span id="demo-log">Ready. No hardware is connected.</span>
-      </div>
+      <div class="demo-log"><strong>Status</strong><span id="demo-log">Ready. No hardware is connected.</span></div>
     </section>
 
     <section class="section-shell" id="build">
-      <div class="section-heading">
+      <div class="section-heading compact">
         <div>
-          <p class="eyebrow">BUILD & INSTALL</p>
-          <h2>Native from source today, package release next.</h2>
+          <p class="eyebrow">BUILD</p>
+          <h2>Build native from source.</h2>
         </div>
-        <p>
-          The repository already contains an Arch PKGBUILD. A public prebuilt
-          package has not been published yet.
-        </p>
+        <p>The repository includes Arch packaging, but a public prebuilt package is not published yet.</p>
       </div>
-
       <div class="build-grid">
         <article>
-          <h3>Arch / CachyOS build dependencies</h3>
-          <pre><code>sudo pacman -S --needed \
-    rust cmake ninja qt6-base \
-    gcc pkgconf polkit</code></pre>
+          <h3>Dependencies</h3>
+          <pre><code>sudo pacman -S --needed     rust cmake ninja qt6-base     gcc pkgconf polkit</code></pre>
         </article>
-
         <article>
-          <h3>Full native quality gate</h3>
+          <h3>Quality gate</h3>
           <pre><code>cd ~/Projects/PowerDeck
 ./native/scripts/native-check.sh</code></pre>
         </article>
-
-        <article>
-          <h3>Development install</h3>
-          <pre><code>cd ~/Projects/PowerDeck
-./native/scripts/dev-install.sh</code></pre>
-        </article>
-
-        <article>
-          <h3>Runtime sanity</h3>
-          <pre><code>powerdeckctl status
-powerdeckctl telemetry --json
-powerdeck</code></pre>
-        </article>
-      </div>
-
-      <div class="runtime-note">
-        <strong>Optional integrations:</strong>
-        <span>
-          brightnessctl · power-profiles-daemon · niri · wireplumber/wpctl
-        </span>
       </div>
     </section>
   </main>
@@ -524,7 +302,5 @@ powerdeck</code></pre>
     <span>PowerDeck · MIT</span>
     <span>Independent project · not affiliated with Dell</span>
   </footer>
-
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
