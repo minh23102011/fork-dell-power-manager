@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="only light">
+  <meta
+    name="description"
+    content="PowerDeck project overview and browser-only interface simulation."
+  >
+  <title>PowerDeck — Linux power management</title>
+  <link rel="stylesheet" href="README.css">
+  <script src="README.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="repo-brand" href="#top" aria-label="PowerDeck overview">
+        <span class="repo-mark" aria-hidden="true">P</span>
+        <span>PowerDeck</span>
+      </a>
+
+      <nav aria-label="README sections">
+        <a href="#overview">Overview</a>
+        <a href="#features">Features</a>
+        <a href="#demo">Demo</a>
+        <a href="#install">Install</a>
+      </nav>
+
+      <a
+        class="topbar-link"
+        href="https://github.com/minh23102011/fork-dell-power-manager"
+      >
+        View repository
+      </a>
+    </div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="repo-header" id="overview">
+      <div>
+        <p class="path">minh23102011 / fork-dell-power-manager</p>
+        <h1>PowerDeck</h1>
+        <p class="lead">
+          A capability-driven Linux power manager for Dell laptops, built
+          around verified hardware writes and ownership-aware restore.
+        </p>
+      </div>
+
+      <div class="repo-actions" aria-label="Project links">
+        <a class="button button-primary" href="#demo">Open the demo</a>
+        <a class="button" href="#install">Local install</a>
+      </div>
+    </section>
+
+    <div class="metadata-row" aria-label="Project metadata">
+      <span>Python 3.12+</span>
+      <span>GTK4 + Libadwaita</span>
+      <span>system D-Bus + Polkit</span>
+      <span>MIT</span>
+      <span>v0.1 candidate</span>
+    </div>
+
+    <article class="readme">
+      <figure class="product-shot">
+        <img
+          src="docs/assets/powerdeck-ui.png"
+          alt="PowerDeck Battery Saver page running in the GTK application"
+        >
+        <figcaption>
+          Current standalone app on the Dell Inspiron 15 3530 test machine.
+        </figcaption>
+      </figure>
+
+      <section class="readme-section">
+        <h2>What PowerDeck does</h2>
+        <p>
+          PowerDeck keeps the graphical application unprivileged. Hardware
+          changes are validated by a system service, written transactionally,
+          read back, and rolled back when verification fails.
+        </p>
+
+        <div class="status-table" role="table" aria-label="Implementation status">
+          <div class="status-row status-head" role="row">
+            <span role="columnheader">Area</span>
+            <span role="columnheader">Current state</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell">Thermal profiles</span>
+            <span role="cell">Verified on the target laptop</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell">Battery charging</span>
+            <span role="cell">Combined and split sysfs layouts supported</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell">Battery Saver</span>
+            <span role="cell">Manual switch and AC transition automation</span>
+          </div>
+          <div class="status-row" role="row">
+            <span role="cell">Restore behavior</span>
+            <span role="cell">Restores only values PowerDeck still owns</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="readme-section" id="features">
+        <h2>Focused controls</h2>
+
+        <div class="feature-list">
+          <article>
+            <h3>Battery</h3>
+            <p>
+              Reads battery health, AC state, bracketed
+              <code>charge_types</code>, charging modes, and custom
+              thresholds. Writes use snapshot, verification, and exact
+              raw-token rollback.
+            </p>
+          </article>
+
+          <article>
+            <h3>Thermal Mode</h3>
+            <p>
+              Applies <code>quiet</code>, <code>cool</code>,
+              <code>balanced</code>, and <code>performance</code> through
+              the Linux platform-profile class.
+            </p>
+          </article>
+
+          <article>
+            <h3>Battery Saver</h3>
+            <p>
+              Coordinates brightness, refresh rate, OS power profile,
+              thermal mode, Intel P-state limits, keyboard light, and
+              optional audio mute.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="readme-section">
+        <h2>Architecture</h2>
+
+        <div class="architecture" aria-label="PowerDeck architecture">
+          <div class="architecture-item">
+            <span class="architecture-label">USER INTERFACE</span>
+            <strong>powerdeck</strong>
+            <p>GTK4 / Libadwaita application</p>
+          </div>
+          <span class="architecture-arrow" aria-hidden="true">→</span>
+          <div class="architecture-item">
+            <span class="architecture-label">SYSTEM SERVICE</span>
+            <strong>powerdeckd</strong>
+            <p>D-Bus, Polkit, battery, thermal, and CPU writes</p>
+          </div>
+          <span class="architecture-arrow" aria-hidden="true">+</span>
+          <div class="architecture-item">
+            <span class="architecture-label">USER SERVICE</span>
+            <strong>powerdeck-agent</strong>
+            <p>AC transitions, Niri, brightness, audio, restore ledger</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="readme-section" id="demo">
+        <div class="section-heading-row">
+          <div>
+            <h2>Interactive app demo</h2>
+            <p>
+              The controls below mirror the current GTK screens as closely
+              as practical in a browser.
+            </p>
+          </div>
+          <span class="simulation-label">SIMULATION</span>
+        </div>
+
+        <div class="notice">
+          This browser demo cannot access or change your hardware. It does not
+          contact <code>powerdeckd</code>.
+        </div>
+
+        <div class="app-frame" aria-label="PowerDeck browser simulation">
+          <div class="app-header">
+            <div class="app-title">PowerDeck</div>
+
+            <div class="app-tabs app-tabs-top" role="tablist" aria-label="PowerDeck pages">
+              <button
+                class="app-tab active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                data-panel="battery-panel"
+              >
+                Battery
+              </button>
+              <button
+                class="app-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-panel="thermal-panel"
+              >
+                Thermal Mode
+              </button>
+              <button
+                class="app-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-panel="saver-panel"
+              >
+                Battery Saver
+              </button>
+            </div>
+
+            <div class="window-actions">
+              <button id="refresh-demo" type="button" aria-label="Refresh simulated state">↻</button>
+              <button id="close-demo" type="button" aria-label="Close simulated app">×</button>
+            </div>
+          </div>
+
+          <div class="app-content">
+            <section
+              class="app-panel active"
+              id="battery-panel"
+              role="tabpanel"
+            >
+              <p class="panel-description">
+                Battery condition and Dell-compatible charge controls.
+              </p>
+
+              <div class="preference-section">
+                <h3>Status</h3>
+                <div class="preference-card">
+                  <div class="preference-row">
+                    <span>Battery</span>
+                    <span class="value">BAT0 · 55%</span>
+                  </div>
+                  <div class="preference-row">
+                    <span>Health</span>
+                    <span class="value">100.0%</span>
+                  </div>
+                  <div class="preference-row">
+                    <span>AC adapter</span>
+                    <span class="value">Connected</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Charging</h3>
+                <div class="preference-card">
+                  <div class="preference-row">
+                    <span>Charging mode</span>
+                    <div class="row-controls">
+                      <select id="charge-mode">
+                        <option value="adaptive">adaptive</option>
+                        <option value="standard">standard</option>
+                        <option value="express">express</option>
+                        <option value="custom" selected>custom</option>
+                      </select>
+                      <button class="app-button" id="apply-charge-mode" type="button">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="preference-row preference-row-tall">
+                    <span>
+                      Custom thresholds
+                      <small>Start and stop charging percentages.</small>
+                    </span>
+                    <div class="row-controls threshold-controls">
+                      <label>
+                        Start
+                        <input
+                          id="start-threshold"
+                          type="number"
+                          min="50"
+                          max="95"
+                          value="50"
+                        >
+                      </label>
+                      <label>
+                        End
+                        <input
+                          id="end-threshold"
+                          type="number"
+                          min="55"
+                          max="100"
+                          value="80"
+                        >
+                      </label>
+                      <button class="app-button" id="apply-thresholds" type="button">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="app-panel"
+              id="thermal-panel"
+              role="tabpanel"
+              hidden
+            >
+              <p class="panel-description">
+                Apply a kernel platform profile through powerdeckd.
+              </p>
+
+              <div class="preference-section">
+                <h3>Current state</h3>
+                <div class="preference-card">
+                  <div class="preference-row">
+                    <span>Current thermal mode</span>
+                    <span class="value" id="thermal-current">balanced</span>
+                  </div>
+                  <div class="preference-row">
+                    <span>OS power profile</span>
+                    <span class="value" id="power-profile-current">balanced</span>
+                  </div>
+                  <div class="preference-row">
+                    <span>CPU governor</span>
+                    <span class="value">powersave</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Profile</h3>
+                <div class="preference-card">
+                  <div class="preference-row">
+                    <span>Thermal mode</span>
+                    <div class="row-controls">
+                      <select id="thermal-mode">
+                        <option value="quiet">quiet</option>
+                        <option value="cool">cool</option>
+                        <option value="balanced" selected>balanced</option>
+                        <option value="performance">performance</option>
+                      </select>
+                      <button class="app-button" id="apply-thermal" type="button">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="app-panel saver-panel"
+              id="saver-panel"
+              role="tabpanel"
+              hidden
+            >
+              <p class="panel-description">
+                Turn Battery Saver on or off directly, or configure optional
+                automatic behavior.
+              </p>
+
+              <div class="preference-section">
+                <h3>Runtime</h3>
+                <div class="preference-card">
+                  <label class="preference-row">
+                    <span>
+                      Battery Saver
+                      <small>
+                        Turn on or off immediately on AC or battery.
+                      </small>
+                    </span>
+                    <input
+                      class="switch"
+                      id="saver-switch"
+                      type="checkbox"
+                      aria-label="Battery Saver"
+                    >
+                  </label>
+                  <div class="preference-row">
+                    <span>
+                      Activation source
+                      <small>
+                        A manually enabled session remains active until you
+                        turn it off.
+                      </small>
+                    </span>
+                    <span class="value" id="activation-source">inactive</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Automation</h3>
+                <div class="preference-card">
+                  <label class="preference-row">
+                    <span>Enable automatic Battery Saver</span>
+                    <input class="switch" type="checkbox" checked>
+                  </label>
+                  <label class="preference-row">
+                    <span>Turn on automatically when unplugged</span>
+                    <input class="switch" type="checkbox" checked>
+                  </label>
+                  <label class="preference-row">
+                    <span>Restore automatic session when AC reconnects</span>
+                    <input class="switch" type="checkbox" checked>
+                  </label>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Display</h3>
+                <div class="preference-card">
+                  <label class="preference-row">
+                    <span>Brightness cap (%)</span>
+                    <input
+                      id="brightness-cap"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="40"
+                    >
+                  </label>
+                  <label class="preference-row">
+                    <span>Only lower brightness</span>
+                    <input class="switch" type="checkbox" checked>
+                  </label>
+                  <label class="preference-row">
+                    <span>Target refresh rate (Hz)</span>
+                    <input
+                      id="refresh-rate"
+                      type="number"
+                      min="30"
+                      max="240"
+                      value="60"
+                    >
+                  </label>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Performance</h3>
+                <div class="preference-card">
+                  <label class="preference-row">
+                    <span>OS power profile</span>
+                    <select id="saver-power-profile">
+                      <option value="power-saver">power-saver</option>
+                      <option value="balanced">balanced</option>
+                      <option value="performance">performance</option>
+                    </select>
+                  </label>
+                  <label class="preference-row">
+                    <span>Thermal profile</span>
+                    <select id="saver-thermal-profile">
+                      <option value="quiet">quiet</option>
+                      <option value="cool">cool</option>
+                      <option value="balanced">balanced</option>
+                      <option value="performance">performance</option>
+                    </select>
+                  </label>
+                  <label class="preference-row">
+                    <span>Disable CPU turbo</span>
+                    <input class="switch" id="disable-turbo" type="checkbox" checked>
+                  </label>
+                  <label class="preference-row">
+                    <span>Maximum CPU performance (%)</span>
+                    <input
+                      id="cpu-cap"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value="60"
+                    >
+                  </label>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Devices</h3>
+                <div class="preference-card">
+                  <label class="preference-row">
+                    <span>Keyboard backlight level</span>
+                    <input
+                      id="keyboard-level"
+                      type="number"
+                      min="0"
+                      max="2"
+                      value="0"
+                    >
+                  </label>
+                  <label class="preference-row">
+                    <span>Mute audio output</span>
+                    <input class="switch" id="mute-audio" type="checkbox">
+                  </label>
+                </div>
+              </div>
+
+              <div class="preference-section">
+                <h3>Settings</h3>
+                <div class="preference-card">
+                  <div class="preference-row">
+                    <span>
+                      Battery Saver settings
+                      <small>
+                        Save values used by the main switch and automation.
+                      </small>
+                    </span>
+                    <button class="app-button" id="save-settings" type="button">
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="app-footer-tabs" role="tablist" aria-label="PowerDeck bottom page switcher">
+            <button
+              class="footer-tab active"
+              type="button"
+              data-panel="battery-panel"
+            >
+              <span>▣</span>
+              Battery
+            </button>
+            <button
+              class="footer-tab"
+              type="button"
+              data-panel="thermal-panel"
+            >
+              <span>▣</span>
+              Thermal Mode
+            </button>
+            <button
+              class="footer-tab"
+              type="button"
+              data-panel="saver-panel"
+            >
+              <span>▣</span>
+              Battery Saver
+            </button>
+          </div>
+        </div>
+
+        <div class="demo-status" aria-live="polite">
+          <span class="demo-status-label">Demo log</span>
+          <span id="demo-log">Ready. No hardware is connected.</span>
+        </div>
+      </section>
+
+      <section class="readme-section" id="install">
+        <h2>Install the local candidate</h2>
+        <p>
+          PowerDeck currently targets an Arch-style system with
+          power-profiles-daemon, PipeWire, Niri, and Dell-compatible kernel
+          interfaces.
+        </p>
+
+        <pre><code>git clone https://github.com/minh23102011/fork-dell-power-manager.git
+cd fork-dell-power-manager
+
+python -m venv .venv
+source .venv/bin/activate.fish
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+
+deactivate
+./scripts/install-local-v0.1.sh
+./scripts/v0.1-check.sh
+./powerdeck</code></pre>
+      </section>
+
+      <section class="readme-section">
+        <h2>Current limitations</h2>
+        <ul>
+          <li>Dell Inspiron 15 3530 is the only real-hardware validation target.</li>
+          <li>Fan curves, direct fan control, undervolting, and per-app rules are outside v0.1.</li>
+          <li>The HTML controls are a simulation, not a browser control surface.</li>
+          <li>The current local Polkit policy should be tightened before a broad public release.</li>
+        </ul>
+      </section>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <span>PowerDeck v0.1 candidate</span>
+    <span>MIT License</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

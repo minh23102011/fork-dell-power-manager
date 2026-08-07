@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
+from powerdeck_backends.battery.charge_types import (
+    mode_from_charge_type,
+    parse_charge_types,
+)
 from powerdeck_core.models import (
     BatteryInfo,
     ChargeCapabilities,
@@ -15,16 +18,6 @@ from powerdeck_core.models import (
 )
 
 _DEFAULT_POWER_SUPPLY_ROOT = Path("/sys/class/power_supply")
-_CHARGE_TYPE_ACTIVE_PATTERN = re.compile(r"\[([^\]]+)\]")
-_CHARGE_MODE_ALIASES: dict[str, ChargeMode] = {
-    "adaptive": ChargeMode.ADAPTIVE,
-    "standard": ChargeMode.STANDARD,
-    "fast": ChargeMode.EXPRESS,
-    "express": ChargeMode.EXPRESS,
-    "express_charge": ChargeMode.EXPRESS,
-    "primarily_ac": ChargeMode.PRIMARILY_AC,
-    "custom": ChargeMode.CUSTOM,
-}
 
 
 def _read_text(path: Path) -> str | None:
@@ -63,38 +56,25 @@ def _read_bool(path: Path) -> bool | None:
     return None
 
 
-def _normalize_mode_token(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
-
-
-def _charge_mode_from_token(value: str | None) -> ChargeMode | None:
-    if value is None:
-        return None
-    return _CHARGE_MODE_ALIASES.get(_normalize_mode_token(value))
-
-
-def _parse_charge_types(text: str | None) -> tuple[tuple[str, ...], str | None]:
-    if text is None:
-        return (), None
-
-    match = _CHARGE_TYPE_ACTIVE_PATTERN.search(text)
-    active = match.group(1).strip() if match is not None else None
-    cleaned = text.replace("[", " ").replace("]", " ")
-    values = tuple(dict.fromkeys(part for part in cleaned.split() if part))
-    return values, active
-
-
 class SysfsBatteryReader:
     """Read battery information exposed by the Linux power-supply class."""
 
-    def __init__(self, root: Path = _DEFAULT_POWER_SUPPLY_ROOT) -> None:
+    def __init__(
+        self,
+        root: Path = _DEFAULT_POWER_SUPPLY_ROOT,
+    ) -> None:
         self.root = root
 
     def _battery_paths(self) -> tuple[Path, ...]:
         try:
             return tuple(
                 sorted(
-                    (path for path in self.root.iterdir() if path.is_dir() and path.name.startswith("BAT")),
+                    (
+                        path
+                        for path in self.root.iterdir()
+                        if path.is_dir()
+                        and path.name.startswith("BAT")
+                    ),
                     key=lambda path: path.name,
                 )
             )
@@ -102,11 +82,19 @@ class SysfsBatteryReader:
             return ()
 
     def read_batteries(self) -> tuple[BatteryInfo, ...]:
-        return tuple(self._read_battery(path) for path in self._battery_paths())
+        return tuple(
+            self._read_battery(path)
+            for path in self._battery_paths()
+        )
 
     def _read_battery(self, path: Path) -> BatteryInfo:
-        charge_types, active_from_list = _parse_charge_types(_read_text(path / "charge_types"))
-        active_charge_type = _read_text(path / "charge_type") or active_from_list
+        parsed = parse_charge_types(
+            _read_text(path / "charge_types")
+        )
+        active_charge_type = (
+            _read_text(path / "charge_type")
+            or parsed.active_raw
+        )
 
         return BatteryInfo(
             name=path.name,
@@ -120,48 +108,109 @@ class SysfsBatteryReader:
             model_name=_read_text(path / "model_name"),
             serial_number=_read_text(path / "serial_number"),
             cycle_count=_read_int(path / "cycle_count"),
-            energy_now_wh=_read_scaled(path / "energy_now", 1_000_000.0),
-            energy_full_wh=_read_scaled(path / "energy_full", 1_000_000.0),
-            energy_full_design_wh=_read_scaled(path / "energy_full_design", 1_000_000.0),
-            charge_now_ah=_read_scaled(path / "charge_now", 1_000_000.0),
-            charge_full_ah=_read_scaled(path / "charge_full", 1_000_000.0),
-            charge_full_design_ah=_read_scaled(path / "charge_full_design", 1_000_000.0),
-            power_now_w=_read_scaled(path / "power_now", 1_000_000.0),
-            current_now_a=_read_scaled(path / "current_now", 1_000_000.0),
-            voltage_now_v=_read_scaled(path / "voltage_now", 1_000_000.0),
-            temperature_celsius=_read_scaled(path / "temp", 10.0),
-            charge_types=charge_types,
+            energy_now_wh=_read_scaled(
+                path / "energy_now",
+                1_000_000.0,
+            ),
+            energy_full_wh=_read_scaled(
+                path / "energy_full",
+                1_000_000.0,
+            ),
+            energy_full_design_wh=_read_scaled(
+                path / "energy_full_design",
+                1_000_000.0,
+            ),
+            charge_now_ah=_read_scaled(
+                path / "charge_now",
+                1_000_000.0,
+            ),
+            charge_full_ah=_read_scaled(
+                path / "charge_full",
+                1_000_000.0,
+            ),
+            charge_full_design_ah=_read_scaled(
+                path / "charge_full_design",
+                1_000_000.0,
+            ),
+            power_now_w=_read_scaled(
+                path / "power_now",
+                1_000_000.0,
+            ),
+            current_now_a=_read_scaled(
+                path / "current_now",
+                1_000_000.0,
+            ),
+            voltage_now_v=_read_scaled(
+                path / "voltage_now",
+                1_000_000.0,
+            ),
+            temperature_celsius=_read_scaled(
+                path / "temp",
+                10.0,
+            ),
+            charge_types=parsed.choices,
             active_charge_type=active_charge_type,
-            charge_control_start_percent=_read_int(path / "charge_control_start_threshold"),
-            charge_control_end_percent=_read_int(path / "charge_control_end_threshold"),
+            charge_control_start_percent=_read_int(
+                path / "charge_control_start_threshold"
+            ),
+            charge_control_end_percent=_read_int(
+                path / "charge_control_end_threshold"
+            ),
         )
 
     def read_charge_capabilities(self) -> ChargeCapabilities:
         detected_modes: set[ChargeMode] = set()
         custom_thresholds = False
         writable = False
+        battery_paths = self._battery_paths()
 
-        for path in self._battery_paths():
-            charge_types, active = _parse_charge_types(_read_text(path / "charge_types"))
-            for value in (*charge_types, active):
-                mode = _charge_mode_from_token(value)
+        for path in battery_paths:
+            parsed = parse_charge_types(
+                _read_text(path / "charge_types")
+            )
+            for value in (*parsed.choices, parsed.active_raw):
+                mode = mode_from_charge_type(value)
                 if mode is not None:
                     detected_modes.add(mode)
 
-            start_path = path / "charge_control_start_threshold"
-            end_path = path / "charge_control_end_threshold"
+            start_path = (
+                path / "charge_control_start_threshold"
+            )
+            end_path = (
+                path / "charge_control_end_threshold"
+            )
             if start_path.exists() and end_path.exists():
                 custom_thresholds = True
                 detected_modes.add(ChargeMode.CUSTOM)
-                writable = writable or (os.access(start_path, os.W_OK) and os.access(end_path, os.W_OK))
+                writable = writable or (
+                    os.access(start_path, os.W_OK)
+                    and os.access(end_path, os.W_OK)
+                )
 
-            charge_type_path = path / "charge_type"
-            writable = writable or (charge_type_path.exists() and os.access(charge_type_path, os.W_OK))
+            for mode_path in (
+                path / "charge_type",
+                path / "charge_types",
+            ):
+                writable = writable or (
+                    mode_path.exists()
+                    and os.access(mode_path, os.W_OK)
+                )
 
-        supported_modes = tuple(mode for mode in ChargeMode if mode in detected_modes)
+        supported_modes = tuple(
+            mode
+            for mode in ChargeMode
+            if mode in detected_modes
+        )
         return ChargeCapabilities(
-            available=bool(supported_modes or custom_thresholds),
-            provider="kernel-power-supply" if self._battery_paths() else None,
+            available=bool(
+                supported_modes
+                or custom_thresholds
+            ),
+            provider=(
+                "kernel-power-supply"
+                if battery_paths
+                else None
+            ),
             supported_modes=supported_modes,
             custom_thresholds=custom_thresholds,
             writable=writable,
@@ -184,15 +233,24 @@ class SysfsBatteryReader:
         )
 
         interval: ChargeInterval | None = None
-        if battery.charge_control_start_percent is not None and battery.charge_control_end_percent is not None:
+        if (
+            battery.charge_control_start_percent is not None
+            and battery.charge_control_end_percent is not None
+        ):
             interval = ChargeInterval(
-                start_percent=battery.charge_control_start_percent,
-                end_percent=battery.charge_control_end_percent,
+                start_percent=(
+                    battery.charge_control_start_percent
+                ),
+                end_percent=(
+                    battery.charge_control_end_percent
+                ),
             )
 
         return ChargeState(
             battery_name=battery.name,
-            mode=_charge_mode_from_token(battery.active_charge_type),
+            mode=mode_from_charge_type(
+                battery.active_charge_type
+            ),
             interval=interval,
             source="kernel-power-supply",
         )

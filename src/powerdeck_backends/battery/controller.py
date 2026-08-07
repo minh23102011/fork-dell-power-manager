@@ -6,10 +6,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from powerdeck_backends.battery.charge_types import (
+    ParsedChargeTypes,
+    mode_from_charge_type,
+    normalize_charge_type,
+    parse_charge_types,
+)
 from powerdeck_core.errors import (
     CommandExecutionError,
     MissingCapabilityError,
     PermissionDeniedError,
+    PowerDeckError,
     RollbackError,
     StateVerificationError,
 )
@@ -20,21 +27,10 @@ from powerdeck_core.validation import (
 )
 
 _DEFAULT_ROOT = Path("/sys/class/power_supply")
+_SOURCE = "linux-power-supply-sysfs"
+
 type ReadText = Callable[[Path], str | None]
 type WriteText = Callable[[Path, str], None]
-
-_MODE_ALIASES: dict[ChargeMode, tuple[str, ...]] = {
-    ChargeMode.ADAPTIVE: ("adaptive",),
-    ChargeMode.STANDARD: ("standard", "normal"),
-    ChargeMode.EXPRESS: ("express", "expresscharge", "fast"),
-    ChargeMode.PRIMARILY_AC: (
-        "primarilyac",
-        "primarily_ac",
-        "primarily-ac",
-        "ac",
-    ),
-    ChargeMode.CUSTOM: ("custom",),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +65,7 @@ class _BatteryInterface:
         return self.directory / "type"
 
     @property
-    def mode_path(self) -> Path:
+    def legacy_mode_path(self) -> Path:
         return self.directory / "charge_type"
 
     @property
@@ -84,6 +80,28 @@ class _BatteryInterface:
     def end_path(self) -> Path:
         return self.directory / "charge_control_end_threshold"
 
+    @property
+    def mode_write_path(self) -> Path | None:
+        if self.legacy_mode_path.exists():
+            return self.legacy_mode_path
+        if self.modes_path.exists():
+            return self.modes_path
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class _ModeSnapshot:
+    parsed: ParsedChargeTypes
+    current_raw: str | None
+    current_mode: ChargeMode | None
+    write_path: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ChargeSnapshot:
+    mode: _ModeSnapshot
+    interval: ChargeInterval | None
+
 
 def _read_text(path: Path) -> str | None:
     try:
@@ -95,50 +113,6 @@ def _read_text(path: Path) -> str | None:
 
 def _write_text(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
-
-
-def _normalized(value: str) -> str:
-    return "".join(character for character in value.lower() if character.isalnum() or character in "_-")
-
-
-def _mode_from_raw(value: str | None) -> ChargeMode | None:
-    if value is None:
-        return None
-    candidate = _normalized(value)
-    for mode, aliases in _MODE_ALIASES.items():
-        if any(_normalized(alias) == candidate for alias in aliases):
-            return mode
-    return None
-
-
-def _raw_choices(value: str | None) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    cleaned = value.replace("[", " ").replace("]", " ").replace(",", " ")
-    return tuple(token for token in cleaned.split() if token)
-
-
-def _available_modes(choices: tuple[str, ...]) -> tuple[ChargeMode, ...]:
-    modes: list[ChargeMode] = []
-    for choice in choices:
-        mode = _mode_from_raw(choice)
-        if mode is not None and mode not in modes:
-            modes.append(mode)
-    return tuple(modes)
-
-
-def _choice_for_mode(
-    mode: ChargeMode,
-    choices: tuple[str, ...],
-) -> str | None:
-    return next(
-        (
-            choice
-            for choice in choices
-            if _mode_from_raw(choice) is mode
-        ),
-        None,
-    )
 
 
 def _read_percent(read_text: ReadText, path: Path) -> int | None:
@@ -168,7 +142,11 @@ class SysfsChargeController:
     def _interfaces(self) -> tuple[_BatteryInterface, ...]:
         try:
             directories = sorted(
-                (path for path in self.root.iterdir() if path.is_dir()),
+                (
+                    path
+                    for path in self.root.iterdir()
+                    if path.is_dir()
+                ),
                 key=lambda path: path.name,
             )
         except OSError:
@@ -177,11 +155,11 @@ class SysfsChargeController:
         interfaces: list[_BatteryInterface] = []
         for directory in directories:
             interface = _BatteryInterface(directory)
-            supply_type = self._read_text(interface.type_path)
-            if supply_type != "Battery":
+            if self._read_text(interface.type_path) != "Battery":
                 continue
             if (
-                interface.mode_path.exists()
+                interface.modes_path.exists()
+                or interface.legacy_mode_path.exists()
                 or interface.start_path.exists()
                 or interface.end_path.exists()
             ):
@@ -192,34 +170,57 @@ class SysfsChargeController:
         interfaces = self._interfaces()
         if not interfaces:
             raise MissingCapabilityError(
-                "No writable battery charge-control interface was found.",
+                "No battery charge-control interface was found.",
                 component="battery",
             )
         return interfaces[0]
+
+    def _read_mode_snapshot(
+        self,
+        interface: _BatteryInterface,
+    ) -> _ModeSnapshot:
+        parsed = parse_charge_types(
+            self._read_text(interface.modes_path)
+        )
+        legacy_raw = self._read_text(interface.legacy_mode_path)
+        current_raw = legacy_raw or parsed.active_raw
+        return _ModeSnapshot(
+            parsed=parsed,
+            current_raw=current_raw,
+            current_mode=mode_from_charge_type(current_raw),
+            write_path=interface.mode_write_path,
+        )
+
+    def _read_interval(
+        self,
+        interface: _BatteryInterface,
+    ) -> ChargeInterval | None:
+        start = _read_percent(self._read_text, interface.start_path)
+        end = _read_percent(self._read_text, interface.end_path)
+        if start is None or end is None:
+            return None
+        return ChargeInterval(start, end)
+
+    def _snapshot(
+        self,
+        interface: _BatteryInterface,
+    ) -> _ChargeSnapshot:
+        return _ChargeSnapshot(
+            mode=self._read_mode_snapshot(interface),
+            interval=self._read_interval(interface),
+        )
 
     def _read_status(
         self,
         interface: _BatteryInterface,
     ) -> ChargeControlStatus:
-        choices = _raw_choices(self._read_text(interface.modes_path))
-        current = _mode_from_raw(self._read_text(interface.mode_path))
-        available = _available_modes(choices)
-        if current is not None and current not in available:
-            available = (*available, current)
-
-        start = _read_percent(self._read_text, interface.start_path)
-        end = _read_percent(self._read_text, interface.end_path)
-        interval = (
-            ChargeInterval(start, end)
-            if start is not None and end is not None
-            else None
-        )
+        snapshot = self._snapshot(interface)
         return ChargeControlStatus(
             battery_name=interface.directory.name,
-            current_mode=current,
-            available_modes=available,
-            interval=interval,
-            source="linux-power-supply-sysfs",
+            current_mode=snapshot.mode.current_mode,
+            available_modes=snapshot.mode.parsed.available_modes,
+            interval=snapshot.interval,
+            source=_SOURCE,
             battery_path=str(interface.directory),
         )
 
@@ -256,69 +257,131 @@ class SysfsChargeController:
                 },
             ) from error
 
-    def _set_mode_raw(
+    def _require_mode_write(
         self,
-        interface: _BatteryInterface,
-        mode: ChargeMode,
-    ) -> None:
-        choices = _raw_choices(self._read_text(interface.modes_path))
-        raw = _choice_for_mode(mode, choices)
-        if raw is None:
+        snapshot: _ModeSnapshot,
+    ) -> Path:
+        if snapshot.write_path is None:
             raise MissingCapabilityError(
-                f"Charging mode is unavailable: {mode.value}",
+                "The battery exposes no writable charge-mode file.",
                 component="battery",
             )
-        self._write(interface.mode_path, raw)
+        if snapshot.current_raw is None:
+            raise MissingCapabilityError(
+                "The active charging mode cannot be snapshotted safely.",
+                component="battery",
+            )
+        return snapshot.write_path
+
+    def _write_mode_raw(
+        self,
+        snapshot: _ModeSnapshot,
+        raw: str,
+    ) -> None:
+        self._write(
+            self._require_mode_write(snapshot),
+            raw,
+        )
+
+    def _mode_matches(
+        self,
+        interface: _BatteryInterface,
+        raw: str,
+    ) -> bool:
+        current = self._read_mode_snapshot(interface).current_raw
+        if current is None:
+            return False
+        return (
+            normalize_charge_type(current)
+            == normalize_charge_type(raw)
+        )
+
+    def _rollback_mode(
+        self,
+        interface: _BatteryInterface,
+        before: _ModeSnapshot,
+    ) -> None:
+        if before.current_raw is None:
+            raise RollbackError(
+                "The previous charging mode was unavailable for rollback.",
+                component="battery",
+            )
+        self._write_mode_raw(before, before.current_raw)
+        if not self._mode_matches(interface, before.current_raw):
+            raise RollbackError(
+                "Battery mode rollback verification failed.",
+                component="battery",
+                details={"previous_raw": before.current_raw},
+            )
 
     def apply_mode(
         self,
         value: str | ChargeMode,
     ) -> ChargeApplyResult:
         interface = self._require_interface()
-        before = self._read_status(interface)
+        before = self._snapshot(interface)
         requested = validate_charge_mode(
             value,
-            before.available_modes,
+            before.mode.parsed.available_modes,
         )
-        if before.current_mode is requested:
+        target_raw = before.mode.parsed.raw_for_mode(requested)
+        if target_raw is None:
+            raise MissingCapabilityError(
+                f"Charging mode is unavailable: {requested.value}",
+                component="battery",
+            )
+
+        self._require_mode_write(before.mode)
+
+        if before.mode.current_mode is requested:
             return ChargeApplyResult(
                 battery_name=interface.directory.name,
                 requested_mode=requested,
-                previous_mode=before.current_mode,
+                previous_mode=before.mode.current_mode,
                 current_mode=requested,
                 previous_interval=before.interval,
                 current_interval=before.interval,
                 changed=False,
                 verified=True,
-                source="linux-power-supply-sysfs",
+                source=_SOURCE,
             )
 
-        self._set_mode_raw(interface, requested)
-        after = self._read_status(interface)
-        if after.current_mode is requested:
+        try:
+            self._write_mode_raw(before.mode, target_raw)
+        except PowerDeckError:
+            if not self._mode_matches(
+                interface,
+                before.mode.current_raw or "",
+            ):
+                self._rollback_mode(interface, before.mode)
+            raise
+
+        after = self._snapshot(interface)
+        if after.mode.current_mode is requested:
             return ChargeApplyResult(
                 battery_name=interface.directory.name,
                 requested_mode=requested,
-                previous_mode=before.current_mode,
+                previous_mode=before.mode.current_mode,
                 current_mode=requested,
                 previous_interval=before.interval,
                 current_interval=after.interval,
                 changed=True,
                 verified=True,
-                source="linux-power-supply-sysfs",
+                source=_SOURCE,
             )
 
-        if before.current_mode is not None:
-            self._set_mode_raw(interface, before.current_mode)
-        restored = self._read_status(interface)
-        if restored.current_mode is not before.current_mode:
-            raise RollbackError(
-                "Battery mode verification failed and rollback failed.",
-                component="battery",
-            )
+        self._rollback_mode(interface, before.mode)
         raise StateVerificationError(
             "Battery mode verification failed; the previous mode was restored.",
             component="battery",
+            details={
+                "requested": requested.value,
+                "observed": (
+                    None
+                    if after.mode.current_mode is None
+                    else after.mode.current_mode.value
+                ),
+            },
         )
 
     def _write_interval(
@@ -328,11 +391,69 @@ class SysfsChargeController:
         current: ChargeInterval,
     ) -> None:
         if interval.end_percent > current.end_percent:
-            self._write(interface.end_path, str(interval.end_percent))
-            self._write(interface.start_path, str(interval.start_percent))
+            self._write(
+                interface.end_path,
+                str(interval.end_percent),
+            )
+            self._write(
+                interface.start_path,
+                str(interval.start_percent),
+            )
         else:
-            self._write(interface.start_path, str(interval.start_percent))
-            self._write(interface.end_path, str(interval.end_percent))
+            self._write(
+                interface.start_path,
+                str(interval.start_percent),
+            )
+            self._write(
+                interface.end_path,
+                str(interval.end_percent),
+            )
+
+    def _rollback_custom(
+        self,
+        interface: _BatteryInterface,
+        before: _ChargeSnapshot,
+    ) -> None:
+        failures: list[str] = []
+
+        if before.interval is not None:
+            current_interval = (
+                self._read_interval(interface)
+                or before.interval
+            )
+            try:
+                self._write_interval(
+                    interface,
+                    before.interval,
+                    current_interval,
+                )
+            except PowerDeckError as error:
+                failures.append(f"thresholds: {error.message}")
+
+        try:
+            self._rollback_mode(interface, before.mode)
+        except PowerDeckError as error:
+            failures.append(f"mode: {error.message}")
+
+        restored = self._snapshot(interface)
+        mode_ok = (
+            before.mode.current_raw is not None
+            and restored.mode.current_raw is not None
+            and normalize_charge_type(restored.mode.current_raw)
+            == normalize_charge_type(before.mode.current_raw)
+        )
+        interval_ok = restored.interval == before.interval
+
+        if failures or not mode_ok or not interval_ok:
+            raise RollbackError(
+                "Custom charging rollback failed.",
+                component="battery",
+                details={
+                    "failures": failures,
+                    "mode_restored": mode_ok,
+                    "interval_restored": interval_ok,
+                },
+            )
 
     def apply_custom(
         self,
@@ -340,64 +461,76 @@ class SysfsChargeController:
         end_percent: object,
     ) -> ChargeApplyResult:
         interface = self._require_interface()
-        before = self._read_status(interface)
+        before = self._snapshot(interface)
+
         if before.interval is None:
             raise MissingCapabilityError(
                 "Custom charging thresholds are unavailable.",
                 component="battery",
             )
+
         requested_interval = validate_charge_interval(
             start_percent,
             end_percent,
         )
         validate_charge_mode(
             ChargeMode.CUSTOM,
-            before.available_modes,
+            before.mode.parsed.available_modes,
         )
+        target_raw = before.mode.parsed.raw_for_mode(
+            ChargeMode.CUSTOM
+        )
+        if target_raw is None:
+            raise MissingCapabilityError(
+                "Custom charging mode is unavailable.",
+                component="battery",
+            )
 
-        if before.current_mode is not ChargeMode.CUSTOM:
-            self._set_mode_raw(interface, ChargeMode.CUSTOM)
-        self._write_interval(
-            interface,
-            requested_interval,
-            before.interval,
-        )
-        after = self._read_status(interface)
+        self._require_mode_write(before.mode)
+
+        try:
+            if before.mode.current_mode is not ChargeMode.CUSTOM:
+                self._write_mode_raw(before.mode, target_raw)
+                if not self._mode_matches(interface, target_raw):
+                    raise StateVerificationError(
+                        "Custom charging mode could not be activated.",
+                        component="battery",
+                    )
+
+            current_interval = (
+                self._read_interval(interface)
+                or before.interval
+            )
+            self._write_interval(
+                interface,
+                requested_interval,
+                current_interval,
+            )
+        except PowerDeckError:
+            self._rollback_custom(interface, before)
+            raise
+
+        after = self._snapshot(interface)
         if (
-            after.current_mode is ChargeMode.CUSTOM
+            after.mode.current_mode is ChargeMode.CUSTOM
             and after.interval == requested_interval
         ):
             return ChargeApplyResult(
                 battery_name=interface.directory.name,
                 requested_mode=ChargeMode.CUSTOM,
-                previous_mode=before.current_mode,
+                previous_mode=before.mode.current_mode,
                 current_mode=ChargeMode.CUSTOM,
                 previous_interval=before.interval,
                 current_interval=requested_interval,
                 changed=(
-                    before.current_mode is not ChargeMode.CUSTOM
+                    before.mode.current_mode is not ChargeMode.CUSTOM
                     or before.interval != requested_interval
                 ),
                 verified=True,
-                source="linux-power-supply-sysfs",
+                source=_SOURCE,
             )
 
-        self._write_interval(
-            interface,
-            before.interval,
-            after.interval or requested_interval,
-        )
-        if before.current_mode is not None:
-            self._set_mode_raw(interface, before.current_mode)
-        restored = self._read_status(interface)
-        if (
-            restored.current_mode is not before.current_mode
-            or restored.interval != before.interval
-        ):
-            raise RollbackError(
-                "Custom charging verification failed and rollback failed.",
-                component="battery",
-            )
+        self._rollback_custom(interface, before)
         raise StateVerificationError(
             "Custom charging verification failed; previous settings were restored.",
             component="battery",
