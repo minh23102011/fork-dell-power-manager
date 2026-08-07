@@ -201,6 +201,95 @@ QString wattsText(const QJsonValue& value) {
     }
     return QString::number(value.toDouble(), 'f', 2) + QStringLiteral(" W");
 }
+
+// PowerDeck charging mode descriptions follow Dell Power Manager semantics.
+QString chargingModeDescription(const QString& mode) {
+    const auto normalized = mode.trimmed().toLower();
+    if (normalized == QStringLiteral("express")) {
+        return QStringLiteral(
+            "Express (Fast): prioritizes charging speed using Dell fast-charge "
+            "behavior. It can trade some long-term battery health for faster charging."
+        );
+    }
+    if (normalized == QStringLiteral("standard")) {
+        return QStringLiteral(
+            "Standard: charges at a moderate rate and balances charge time with "
+            "everyday battery use."
+        );
+    }
+    if (normalized == QStringLiteral("adaptive")) {
+        return QStringLiteral(
+            "Adaptive: firmware automatically adjusts charging behavior around "
+            "your typical usage pattern."
+        );
+    }
+    if (normalized == QStringLiteral("primarily_ac")) {
+        return QStringLiteral(
+            "Primarily AC: intended for systems that stay plugged in most of the "
+            "time and avoids keeping the battery at full charge."
+        );
+    }
+    if (normalized == QStringLiteral("custom")) {
+        return QStringLiteral(
+            "Custom: uses the start and stop thresholds below. Applying thresholds "
+            "also activates Custom mode."
+        );
+    }
+    return QStringLiteral("Select a charging mode to see what the firmware policy does.");
+}
+
+QString thermalProfileDescription(const QString& profile) {
+    const auto normalized = profile.trimmed().toLower();
+    if (normalized == QStringLiteral("cool")) {
+        return QStringLiteral(
+            "Cool: prioritizes lower surface temperature. Firmware may increase "
+            "fan activity and reduce performance to stay cooler."
+        );
+    }
+    if (normalized == QStringLiteral("quiet")) {
+        return QStringLiteral(
+            "Quiet: prioritizes lower fan noise. Firmware may reduce performance "
+            "and allow a warmer surface temperature."
+        );
+    }
+    if (normalized == QStringLiteral("balanced")) {
+        return QStringLiteral(
+            "Balanced: balances performance, fan noise and system temperature "
+            "for normal use."
+        );
+    }
+    if (normalized == QStringLiteral("performance")) {
+        return QStringLiteral(
+            "Performance: prioritizes sustained performance. Firmware may use "
+            "more aggressive cooling and produce more fan noise."
+        );
+    }
+    return QStringLiteral("Select a cooling profile to see how firmware will behave.");
+}
+
+QString humanDbusError(const QString& text) {
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(text.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        return text;
+    }
+
+    const auto object = document.object();
+    const auto details = object.value(QStringLiteral("details")).toObject();
+    const auto reason = details.value(QStringLiteral("reason")).toString();
+    if (reason.contains(
+            QStringLiteral("no agent is available"),
+            Qt::CaseInsensitive
+        )) {
+        return QStringLiteral(
+            "Power setting change was denied because this session has no "
+            "Polkit authentication agent."
+        );
+    }
+
+    const auto message = object.value(QStringLiteral("message")).toString();
+    return message.isEmpty() ? text : message;
+}
 }  // namespace
 
 class SwitchCheckBox final : public QCheckBox {
@@ -526,11 +615,20 @@ QWidget* MainWindow::buildBatteryPage() {
         )
     );
 
+    auto* chargeModeHelp = new QLabel(
+        chargingModeDescription(QString()),
+        controlSurface
+    );
+    chargeModeHelp->setObjectName("mutedText");
+    chargeModeHelp->setWordWrap(true);
+    controlLayout->addWidget(chargeModeHelp);
+
     connect(
         chargeModeSelect_,
         &QComboBox::currentTextChanged,
         this,
-        [this](const QString& mode) {
+        [this, chargeModeHelp](const QString& mode) {
+            chargeModeHelp->setText(chargingModeDescription(mode));
             const auto current = chargeModeSelect_
                                      ->property("powerdeckCurrentMode")
                                      .toString();
@@ -553,6 +651,15 @@ QWidget* MainWindow::buildBatteryPage() {
     chargeEnd_->setRange(55, 100);
     chargeEnd_->setSuffix(QStringLiteral(" %"));
     chargeEnd_->setMinimumWidth(92);
+
+    connect(
+        chargeStart_,
+        static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+        this,
+        [this](int start) {
+            chargeEnd_->setMinimum(std::max(55, start + 5));
+        }
+    );
 
     applyThresholdsButton_ = new QPushButton(
         QStringLiteral("Apply thresholds"),
@@ -588,6 +695,35 @@ QWidget* MainWindow::buildBatteryPage() {
             thresholdActions,
             controlSurface
         )
+    );
+
+    const auto updateThresholdApplyState = [this]() {
+        const bool available = applyThresholdsButton_
+                                   ->property("powerdeckThresholdsAvailable")
+                                   .toBool();
+        const int start = chargeStart_->value();
+        const int end = chargeEnd_->value();
+        const int currentStart = chargeStart_
+                                     ->property("powerdeckCurrentValue")
+                                     .toInt();
+        const int currentEnd = chargeEnd_
+                                   ->property("powerdeckCurrentValue")
+                                   .toInt();
+        const bool valid = end - start >= 5;
+        const bool changed = start != currentStart || end != currentEnd;
+        applyThresholdsButton_->setEnabled(available && valid && changed);
+    };
+    connect(
+        chargeStart_,
+        static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+        this,
+        [updateThresholdApplyState](int) { updateThresholdApplyState(); }
+    );
+    connect(
+        chargeEnd_,
+        static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+        this,
+        [updateThresholdApplyState](int) { updateThresholdApplyState(); }
     );
 
     chargeControlNote_ = new QLabel(
@@ -728,6 +864,14 @@ QWidget* MainWindow::buildThermalPage() {
     requestedHint->setWordWrap(true);
     profileLayout->addWidget(requestedHint, 2, 1);
 
+    auto* thermalModeHelp = new QLabel(
+        thermalProfileDescription(QString()),
+        profileSurface
+    );
+    thermalModeHelp->setObjectName("inlineNote");
+    thermalModeHelp->setWordWrap(true);
+    profileLayout->addWidget(thermalModeHelp, 3, 0, 1, 2);
+
     profileLayout->setColumnStretch(0, 1);
     profileLayout->setColumnStretch(1, 1);
 
@@ -735,7 +879,8 @@ QWidget* MainWindow::buildThermalPage() {
         thermalSelect_,
         &QComboBox::currentTextChanged,
         this,
-        [this](const QString& profile) {
+        [this, thermalModeHelp](const QString& profile) {
+            thermalModeHelp->setText(thermalProfileDescription(profile));
             applyThermalButton_->setEnabled(
                 !profile.isEmpty() && profile != thermalCurrent_->text()
             );
@@ -983,6 +1128,23 @@ QWidget* MainWindow::buildSaverPage() {
             performanceSurface
         )
     );
+
+    auto* saverThermalHelp = new QLabel(
+        thermalProfileDescription(saverThermal_->currentText()),
+        performanceSurface
+    );
+    saverThermalHelp->setObjectName("mutedText");
+    saverThermalHelp->setWordWrap(true);
+    performanceLayout->addWidget(saverThermalHelp);
+    connect(
+        saverThermal_,
+        &QComboBox::currentTextChanged,
+        this,
+        [saverThermalHelp](const QString& profile) {
+            saverThermalHelp->setText(thermalProfileDescription(profile));
+        }
+    );
+
     performanceLayout->addWidget(divider(performanceSurface));
     performanceLayout->addWidget(
         settingRow(
@@ -1408,14 +1570,19 @@ void MainWindow::callJson(
 }
 
 void MainWindow::showError(const QString& text) {
-    statusLabel_->setText(QStringLiteral("Error · ") + text);
+    statusLabel_->setText(
+        QStringLiteral("Error · ") + humanDbusError(text)
+    );
+    statusLabel_->setToolTip(text);
 }
 
 void MainWindow::showStatus(const QString& text) {
     statusLabel_->setText(text);
+    statusLabel_->setToolTip(QString());
 }
 
 void MainWindow::refreshAll() {
+    showStatus(QStringLiteral("Connected"));
     refreshBattery();
     refreshThermal();
     refreshTelemetry();
@@ -1487,25 +1654,35 @@ void MainWindow::refreshBattery() {
             const auto interval = state
                                       .value(QStringLiteral("interval"))
                                       .toObject();
-            if (!interval.isEmpty()) {
+            const bool thresholdsAvailable = customAvailable && !interval.isEmpty();
+            if (thresholdsAvailable) {
                 const auto start = interval
                                        .value(QStringLiteral("start_percent"))
                                        .toInt();
                 const auto end = interval
                                      .value(QStringLiteral("end_percent"))
                                      .toInt();
+                chargeStart_->setProperty("powerdeckCurrentValue", start);
+                chargeEnd_->setProperty("powerdeckCurrentValue", end);
                 chargeStart_->setValue(start);
+                chargeEnd_->setMinimum(std::max(55, start + 5));
                 chargeEnd_->setValue(end);
                 chargeInterval_->setText(
                     QStringLiteral("%1–%2 %").arg(start).arg(end)
                 );
             } else {
+                chargeStart_->setProperty("powerdeckCurrentValue", -1);
+                chargeEnd_->setProperty("powerdeckCurrentValue", -1);
                 chargeInterval_->setText(QStringLiteral("Unavailable"));
             }
 
-            chargeStart_->setEnabled(customAvailable);
-            chargeEnd_->setEnabled(customAvailable);
-            applyThresholdsButton_->setEnabled(customAvailable);
+            applyThresholdsButton_->setProperty(
+                "powerdeckThresholdsAvailable",
+                thresholdsAvailable
+            );
+            chargeStart_->setEnabled(thresholdsAvailable);
+            chargeEnd_->setEnabled(thresholdsAvailable);
+            applyThresholdsButton_->setEnabled(false);
 
             if (!supported) {
                 chargeControlNote_->setText(
@@ -1519,7 +1696,14 @@ void MainWindow::refreshBattery() {
                 chargeControlNote_->setText(
                     QStringLiteral(
                         "Charging modes are available, but this firmware does "
-                        "not advertise custom start/stop thresholds."
+                        "not advertise Custom mode."
+                    )
+                );
+            } else if (!thresholdsAvailable) {
+                chargeControlNote_->setText(
+                    QStringLiteral(
+                        "Custom mode is advertised, but the kernel does not expose "
+                        "verified start/stop threshold controls."
                     )
                 );
             } else {
@@ -1715,6 +1899,14 @@ void MainWindow::applyChargeMode() {
 }
 
 void MainWindow::applyThresholds() {
+    if (chargeEnd_->value() - chargeStart_->value() < 5) {
+        showError(
+            QStringLiteral(
+                "Custom charge end must be at least 5% above the start threshold."
+            )
+        );
+        return;
+    }
     callJson(
         true,
         kSystemService,

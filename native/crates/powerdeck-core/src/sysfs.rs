@@ -40,11 +40,45 @@ impl SysfsIo for StdSysfsIo {
         let mut directories = Vec::new();
         for entry in fs::read_dir(root)? {
             let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                directories.push(entry.path());
+            let path = entry.path();
+            if path.is_dir() {
+                directories.push(path);
             }
         }
         directories.sort();
         Ok(directories)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    #[test]
+    fn list_dirs_follows_symlinked_directories() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before Unix epoch")
+            .as_nanos();
+        let base =
+            std::env::temp_dir().join(format!("powerdeck-sysfs-{}-{unique}", std::process::id()));
+        let class_root = base.join("class");
+        let device_root = base.join("device");
+        let class_link = class_root.join("BAT0");
+
+        fs::create_dir_all(&class_root).expect("create class root");
+        fs::create_dir_all(&device_root).expect("create device root");
+        symlink(&device_root, &class_link).expect("create sysfs-style symlink");
+
+        let directories = StdSysfsIo
+            .list_dirs(&class_root)
+            .expect("enumerate class root");
+
+        assert_eq!(directories, vec![class_link]);
+
+        fs::remove_dir_all(&base).expect("remove test tree");
     }
 }
