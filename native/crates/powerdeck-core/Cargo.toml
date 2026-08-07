@@ -1,0 +1,10 @@
+[package]
+name = "powerdeck-core-native"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "powerdeck_core_native"
+path = "src/lib.rs"
