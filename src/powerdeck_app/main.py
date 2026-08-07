@@ -406,8 +406,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             page = Adw.PreferencesPage()
             page.set_title("Battery Saver")
             page.set_description(
-                "Automatically applies session and CPU limits on battery, "
-                "then restores only values still owned by PowerDeck."
+                "Turn Battery Saver on or off directly, or configure "
+                "optional automatic behavior."
             )
 
             runtime_state = SessionController().status()
@@ -415,10 +415,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             runtime = Adw.PreferencesGroup(title="Runtime")
             active_row = Adw.ActionRow(
-                title="Battery Saver active now",
+                title="Battery Saver",
                 subtitle=(
-                    "Direct control on AC or battery. Manual OFF on "
-                    "battery stays off until the next power transition."
+                    "Turn on or off immediately on AC or battery. "
+                    "Turning off restores only settings PowerDeck "
+                    "still owns."
                 ),
             )
             active_switch = Gtk.Switch(
@@ -554,23 +555,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             page.add(devices)
 
-            actions = Adw.PreferencesGroup(title="Actions")
+            actions = Adw.PreferencesGroup(title="Settings")
             row = Adw.ActionRow(
-                title="Battery Saver controls",
-                subtitle="Save settings, apply immediately, or restore.",
+                title="Battery Saver settings",
+                subtitle=(
+                    "Save the values used by the main switch and "
+                    "automatic activation."
+                ),
             )
             row.add_suffix(
                 self._button("Save", self._save_saver_settings)
             )
-            row.add_suffix(
-                self._button("Apply now", self._apply_saver)
-            )
-            restore = Gtk.Button(label="Restore")
-            restore.connect(
-                "clicked",
-                lambda _button: self._restore_saver(),
-            )
-            row.add_suffix(restore)
             actions.add(row)
             page.add(actions)
 
@@ -650,23 +645,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             settings = self._settings_from_widgets()
             save_settings(settings)
             self._toast("Battery Saver settings saved.")
-
-        def _apply_saver(self) -> None:
-            settings = self._settings_from_widgets()
-            save_settings(settings)
-            self._run_operation(
-                "Applying Battery Saver...",
-                lambda: SessionController().apply_now(
-                    settings,
-                    activation="manual",
-                ),
-            )
-
-        def _restore_saver(self) -> None:
-            self._run_operation(
-                "Restoring previous session state...",
-                lambda: SessionController().restore_now(),
-            )
 
         def _apply_thermal(self, dropdown: Any) -> None:
             profile = _selected_text(dropdown)
